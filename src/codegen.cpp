@@ -35,6 +35,22 @@ llvm::Function* CodeGen::getcharFn() {
     return getchar_;
 }
 
+llvm::Function* CodeGen::printfFn() {
+    if (printf_) return printf_;
+    auto* ty = llvm::FunctionType::get(llvm::Type::getInt32Ty(*ctx_),
+                                        {llvm::PointerType::getUnqual(*ctx_)}, true);
+    printf_ = llvm::Function::Create(ty, llvm::Function::ExternalLinkage, "printf", mod_.get());
+    return printf_;
+}
+
+llvm::Function* CodeGen::scanfFn() {
+    if (scanf_) return scanf_;
+    auto* ty = llvm::FunctionType::get(llvm::Type::getInt32Ty(*ctx_),
+                                        {llvm::PointerType::getUnqual(*ctx_)}, true);
+    scanf_ = llvm::Function::Create(ty, llvm::Function::ExternalLinkage, "scanf", mod_.get());
+    return scanf_;
+}
+
 void CodeGen::declareFn(const FunctionDecl& fn) {
     std::vector<llvm::Type*> paramTys;
     for (auto& p : fn.params) paramTys.push_back(mapType(p.type));
@@ -201,9 +217,40 @@ llvm::Value* CodeGen::genBinary(const BinaryExpr& e) {
 
 llvm::Value* CodeGen::genWrite(const CallExpr& c) {
     if (c.args.size() != 1) throw CompileError(c.loc, "write() takes exactly 1 argument");
+
+    // String literals keep the original puts() lowering.
+    if (auto* s = dynamic_cast<const StringLiteralExpr*>(c.args[0].get()))
+        return b_->CreateCall(putsFn(), {b_->CreateGlobalString(s->value, "str")});
+
+    // Anything else is treated as an int-valued expression (the only
+    // non-void type Shine has today) and printed via printf, since puts()
+    // only knows how to print C strings.
+    llvm::Value* val = genExpr(*c.args[0]);
+    if (!val->getType()->isIntegerTy())
+        throw CompileError(c.args[0]->loc, "write() only supports string literals or int expressions");
+    llvm::Value* fmt = b_->CreateGlobalString("%d\n", "fmt");
+    return b_->CreateCall(printfFn(), {fmt, val});
+}
+
+llvm::Value* CodeGen::genUserInput(const CallExpr& c) {
+    if (c.args.size() != 1) throw CompileError(c.loc, "user_input() takes exactly 1 argument");
     auto* s = dynamic_cast<const StringLiteralExpr*>(c.args[0].get());
-    if (!s) throw CompileError(c.args[0]->loc, "write() only supports string literals for now");
-    return b_->CreateCall(putsFn(), {b_->CreateGlobalString(s->value, "str")});
+    if (!s) throw CompileError(c.args[0]->loc, "user_input() prompt must be a string literal");
+
+    llvm::Value* promptFmt = b_->CreateGlobalString("%s", "fmt");
+    b_->CreateCall(printfFn(), {promptFmt, b_->CreateGlobalString(s->value, "str")});
+
+    llvm::Function* f = b_->GetInsertBlock()->getParent();
+    llvm::Type* i32 = llvm::Type::getInt32Ty(*ctx_);
+    llvm::AllocaInst* slot = createAlloca(f, i32, "input");
+    // scanf leaves uninitialized memory on a bad/empty parse; zero it first
+    // so a failed read still yields a defined int rather than garbage.
+    b_->CreateStore(llvm::ConstantInt::get(i32, 0, true), slot);
+
+    llvm::Value* scanFmt = b_->CreateGlobalString("%d", "fmt");
+    b_->CreateCall(scanfFn(), {scanFmt, slot});
+
+    return b_->CreateLoad(i32, slot, "input");
 }
 
 llvm::Value* CodeGen::genTerminalPause(const CallExpr& c) {
@@ -217,6 +264,7 @@ llvm::Value* CodeGen::genTerminalPause(const CallExpr& c) {
 llvm::Value* CodeGen::genCall(const CallExpr& c) {
     if (c.callee == "write") return genWrite(c);
     if (c.callee == "terminal.pause") return genTerminalPause(c);
+    if (c.callee == "user_input") return genUserInput(c);
     auto it = fns_.find(c.callee);
     if (it == fns_.end()) throw CompileError(c.loc, "call to undeclared function '" + c.callee + "'");
 

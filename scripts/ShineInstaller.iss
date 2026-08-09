@@ -3,9 +3,9 @@
 ; Non-commercial use only
 
 #define MyAppName "Shine"
-#define MyAppVersion "v0.3.0-BETA"
+#define MyAppVersion "v0.4.0-BETA"
 #define MyAppPublisher "Shine Language"
-#define MyAppURL "TBD"
+#define MyAppURL "https://shine-language.github.io/Shine-Website/"
 #define MyAppExeName "shinec.exe"
 
 [Setup]
@@ -36,7 +36,7 @@ InfoAfterFile=C:\Users\ayden\Downloads\shinereadme.txt
 ; Uncomment the following line to run in non administrative install mode (install for current user only).
 ;PrivilegesRequired=lowest
 OutputDir=D:\Projects\Shine\dist
-OutputBaseFilename=Shine-v0.3.0-BETA-Installer
+OutputBaseFilename=Shine-v0.4.0-BETA-Installer
 SetupIconFile=D:\Projects\Shine\assets\logo.ico
 SolidCompression=yes
 WizardStyle=modern dynamic windows11
@@ -47,7 +47,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
 Source: "D:\Projects\Shine\build\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "D:\Projects\Shine\dist\shine-v0.3.0-BETA\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "D:\Projects\Shine\dist\shine-v0.4.0-BETA\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]

@@ -1,0 +1,15 @@
+fn int square(n: int) {
+    r/n * n;
+}
+
+fn int main() {
+    // write() now accepts int-valued expressions, not just string literals.
+    write(42);
+    write(square(7));
+
+    // user_input() prints the prompt, reads an int, and returns it.
+    var(int) x = user_input("Enter a number: ");
+    write(x * 2);
+
+    r/0;
+}

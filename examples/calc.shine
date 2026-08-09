@@ -1,0 +1,31 @@
+fn int main() {
+	var(int) num1 = user_input("Pick a number  ");
+	var(int) num2 = user_input("Pick a second number  ");
+	var(int) op = user_input("What operator do you want? 1 = +, 2 = -, 3 = *, 4 = /  ");
+	var(int) product = 0;
+	var(int) validop = 1;
+	
+	if (op == 1) {
+		product = num1 + num2;
+	}
+	else if (op == 2) {
+		product = num1 - num2;
+	}
+	else if (op == 3) {
+		product = num1 * num2;
+	}
+	else if (op == 4) {
+		product = num1 / num2;
+	} else {
+		validop = 0;
+		write("No valid number entered for the operator. Please retry and enter a valid input.");
+	}
+	
+	if (validop == 1) {
+		write(product);
+	}
+	
+	terminal.pause(user_action);
+	
+	r/0;
+}

@@ -40,10 +40,13 @@ private:
     llvm::Value* genCall(const CallExpr& c);
     llvm::Value* genWrite(const CallExpr& c);
     llvm::Value* genTerminalPause(const CallExpr& c);
+    llvm::Value* genUserInput(const CallExpr& c);
     llvm::Type* mapType(const TypeRef& t);
     llvm::AllocaInst* createAlloca(llvm::Function* f, llvm::Type* ty, const std::string& name);
     llvm::Function* putsFn();
     llvm::Function* getcharFn();
+    llvm::Function* printfFn();
+    llvm::Function* scanfFn();
 
     std::unique_ptr<llvm::LLVMContext> ctx_;
     std::unique_ptr<llvm::Module> mod_;
@@ -53,6 +56,8 @@ private:
     std::vector<LoopCtx> loopStack_;
     llvm::Function* puts_ = nullptr;
     llvm::Function* getchar_ = nullptr;
+    llvm::Function* printf_ = nullptr;
+    llvm::Function* scanf_ = nullptr;
 };
 
 }
