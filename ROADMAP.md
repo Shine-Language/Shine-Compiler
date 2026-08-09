@@ -24,7 +24,11 @@
 - [ ] Allow `write()` to support non string literals
     - Any int-valued expression can now be passed to `write()`
 
-## v0.5.0 - real types
+## v0.5.0 - Error Handling
+- [ ] General improvements to error handling
+- [ ] Better default error messages
+
+## v0.6.0 - real types
 - [ ] Type hierarchy instead of string-named TypeRef
 - [ ] Pointers, fixed-width ints
 - [ ] Type-checking pass (codegen currently does no validation of its own)
