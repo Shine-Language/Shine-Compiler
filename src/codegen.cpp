@@ -250,6 +250,14 @@ llvm::Value* CodeGen::genUserInput(const CallExpr& c) {
     llvm::Value* scanFmt = b_->CreateGlobalString("%d", "fmt");
     b_->CreateCall(scanfFn(), {scanFmt, slot});
 
+    // scanf("%d", ...) stops at the first non-digit, which is normally the
+    // newline the user pressed after entering their number.  If that byte is
+    // left in stdin, a later terminal.pause()'s getchar() would consume it
+    // and return immediately, so the pause would never actually wait for the
+    // user.  Consume the single delimiter byte here to keep the input stream
+    // clean for whatever comes next (another user_input or terminal.pause).
+    b_->CreateCall(getcharFn(), {});
+
     return b_->CreateLoad(i32, slot, "input");
 }
 

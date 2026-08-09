@@ -39,6 +39,11 @@
 - [ ] Multi-file modules
 - [ ] C FFI (extern function declarations, calling into existing native
       libs).
+- [ ] `defer` statements for guaranteed cleanup
+- [ ] Error handling (error unions / Result-style)
+- [ ] Function pointers and callbacks (needed for the C FFI)
+- [ ] Closures with explicit capture (allocator-controlled, no GC)
+- [ ] Allocator story in the stdlib (arena, pool, bump allocators)
 - [ ] Package manager + package ecosystem (Cargo/pip-style)
 - [ ] Ability to generate .dll's
 - [ ] UI Tool
