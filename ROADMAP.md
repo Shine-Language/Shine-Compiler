@@ -18,10 +18,10 @@
 - [x] break (written as stop) and continue (written as cont) loop controls
 
 ## v0.4.0 - inputs & non string literals
-- [ ] Add user inputs
+- [x] Add user inputs
     - Would be written as `user_input("TEXT")`
     - Prints the prompt, reads an int from stdin (via scanf), returns it
-- [ ] Allow `write()` to support non string literals
+- [x] Allow `write()` to support non string literals
     - Any int-valued expression can now be passed to `write()`
 
 ## v0.5.0 - Error Handling
