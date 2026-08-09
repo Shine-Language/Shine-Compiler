@@ -222,9 +222,6 @@ llvm::Value* CodeGen::genWrite(const CallExpr& c) {
     if (auto* s = dynamic_cast<const StringLiteralExpr*>(c.args[0].get()))
         return b_->CreateCall(putsFn(), {b_->CreateGlobalString(s->value, "str")});
 
-    // Anything else is treated as an int-valued expression (the only
-    // non-void type Shine has today) and printed via printf, since puts()
-    // only knows how to print C strings.
     llvm::Value* val = genExpr(*c.args[0]);
     if (!val->getType()->isIntegerTy())
         throw CompileError(c.args[0]->loc, "write() only supports string literals or int expressions");
@@ -243,19 +240,12 @@ llvm::Value* CodeGen::genUserInput(const CallExpr& c) {
     llvm::Function* f = b_->GetInsertBlock()->getParent();
     llvm::Type* i32 = llvm::Type::getInt32Ty(*ctx_);
     llvm::AllocaInst* slot = createAlloca(f, i32, "input");
-    // scanf leaves uninitialized memory on a bad/empty parse; zero it first
-    // so a failed read still yields a defined int rather than garbage.
+
     b_->CreateStore(llvm::ConstantInt::get(i32, 0, true), slot);
 
     llvm::Value* scanFmt = b_->CreateGlobalString("%d", "fmt");
     b_->CreateCall(scanfFn(), {scanFmt, slot});
 
-    // scanf("%d", ...) stops at the first non-digit, which is normally the
-    // newline the user pressed after entering their number.  If that byte is
-    // left in stdin, a later terminal.pause()'s getchar() would consume it
-    // and return immediately, so the pause would never actually wait for the
-    // user.  Consume the single delimiter byte here to keep the input stream
-    // clean for whatever comes next (another user_input or terminal.pause).
     b_->CreateCall(getcharFn(), {});
 
     return b_->CreateLoad(i32, slot, "input");
