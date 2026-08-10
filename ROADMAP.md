@@ -33,12 +33,11 @@
 - [ ] Pointers, fixed-width ints
 - [ ] Type-checking pass (codegen currently does no validation of its own)
 
-## Later
+## Later (Will be added in the future)
 - [ ] Structs, arrays
 - [ ] Standard library (move write out of the compiler)
 - [ ] Multi-file modules
-- [ ] C FFI (extern function declarations, calling into existing native
-      libs).
+- [ ] C FFI (extern function declarations, calling into existing native libs).
 - [ ] `defer` statements for guaranteed cleanup
 - [ ] Error handling (error unions / Result-style)
 - [ ] Function pointers and callbacks (needed for the C FFI)
@@ -47,5 +46,8 @@
 - [ ] Package manager + package ecosystem (Cargo/pip-style)
 - [ ] Ability to generate .dll's
 - [ ] UI Tool
-- [ ] Freestanding codegen mode (no libc, no CRT startup, custom entry
-      point/linker script)
+- [ ] Freestanding codegen mode (no libc, no CRT startup, custom entry point/linker script)
+
+## TBD (May or may not be added in the future)
+
+- [ ] Simple interpreter
