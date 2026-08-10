@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include "shine/ast.h"
+#include "shine/error.h"
 #include "shine/token.h"
 
 namespace shine {
@@ -38,6 +39,7 @@ private:
     ExprPtr primary();
 
     [[noreturn]] void err(const Token& t, const std::string& msg) const;
+    [[noreturn]] void err(const Token& t, Err code, const std::vector<std::string>& args = {}) const;
 
     std::vector<Token> toks_;
     size_t pos_ = 0;

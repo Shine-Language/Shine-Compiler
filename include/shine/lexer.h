@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <vector>
+#include "shine/error.h"
 #include "shine/token.h"
 
 namespace shine {
@@ -20,6 +21,7 @@ private:
     Token number();
     Token str();
     [[noreturn]] void err(const std::string& msg) const;
+    [[noreturn]] void err(Err code, const std::vector<std::string>& args = {}) const;
 
     std::string src_, file_;
     size_t pos_ = 0;

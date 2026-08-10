@@ -27,13 +27,17 @@ bool Parser::match(TokenKind k) {
 }
 
 const Token& Parser::expect(TokenKind k, const std::string& ctx) {
-    if (!check(k)) err(peek(), "expected " + std::string(tokenName(k)) + " " + ctx +
-                                    ", got " + tokenName(peek().kind));
+    if (!check(k))
+        err(peek(), Err::ExpectedToken, {tokenName(k), ctx, tokenName(peek().kind)});
     return advance();
 }
 
 void Parser::err(const Token& t, const std::string& msg) const {
     throw CompileError(t.loc, msg);
+}
+
+void Parser::err(const Token& t, Err code, const std::vector<std::string>& args) const {
+    throw CompileError(t.loc, code, args);
 }
 
 Module Parser::parseModule(std::string file) {
@@ -45,7 +49,7 @@ Module Parser::parseModule(std::string file) {
 TypeRef Parser::type() {
     if (check(TokenKind::KwInt)) return {"int", advance().loc};
     if (check(TokenKind::KwVoid)) return {"void", advance().loc};
-    err(peek(), "expected a type");
+    err(peek(), Err::ExpectedType);
 }
 
 Param Parser::param() {
@@ -69,7 +73,7 @@ FunctionDecl Parser::function() {
 
     expect(TokenKind::LBrace, "to start body");
     while (!check(TokenKind::RBrace)) {
-        if (atEnd()) err(peek(), "unexpected end of file in function body");
+        if (atEnd()) err(peek(), Err::UnexpectedEof, {"function body"});
         fn.body.push_back(stmt());
     }
     expect(TokenKind::RBrace, "to close body");
@@ -95,7 +99,7 @@ std::vector<StmtPtr> Parser::block() {
     expect(TokenKind::LBrace, "to start block");
     std::vector<StmtPtr> body;
     while (!check(TokenKind::RBrace)) {
-        if (atEnd()) err(peek(), "unexpected end of file in block");
+        if (atEnd()) err(peek(), Err::UnexpectedEof, {"block"});
         body.push_back(stmt());
     }
     expect(TokenKind::RBrace, "to close block");
@@ -259,7 +263,7 @@ ExprPtr Parser::primary() {
             callee += "." + expect(TokenKind::Identifier, "after '.'").text;
         }
         if (!check(TokenKind::LParen)) {
-            if (callee != name.text) err(name, "expected '(' after '" + callee + "'");
+            if (callee != name.text) err(name, Err::ExpectedToken, {"'('", "after '" + callee + "'", tokenName(peek().kind)});
             auto e = std::make_unique<IdentifierExpr>();
             e->loc = name.loc;
             e->name = callee;
@@ -276,7 +280,7 @@ ExprPtr Parser::primary() {
         expect(TokenKind::RParen, "to close call");
         return call;
     }
-    err(peek(), "expected an expression");
+    err(peek(), Err::ExpectedExpression);
 }
 
 }

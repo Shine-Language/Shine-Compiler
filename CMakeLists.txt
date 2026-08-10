@@ -19,6 +19,7 @@ llvm_map_components_to_libnames(LLVM_LIBS core support target
 separate_arguments(LLVM_DEFINITIONS_LIST UNIX_COMMAND "${LLVM_DEFINITIONS}")
 
 add_executable(shinec
+    src/error.cpp
     src/lexer.cpp
     src/parser.cpp
     src/codegen.cpp

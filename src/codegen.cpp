@@ -12,7 +12,7 @@ CodeGen::CodeGen()
 llvm::Type* CodeGen::mapType(const TypeRef& t) {
     if (t.name == "int") return llvm::Type::getInt32Ty(*ctx_);
     if (t.name == "void") return llvm::Type::getVoidTy(*ctx_);
-    throw CompileError(t.loc, "unknown type '" + t.name + "'");
+    throw CompileError(t.loc, Err::UnknownType, {t.name});
 }
 
 llvm::AllocaInst* CodeGen::createAlloca(llvm::Function* f, llvm::Type* ty, const std::string& name) {
@@ -82,7 +82,7 @@ void CodeGen::defineFn(const FunctionDecl& fn) {
     std::string errStr;
     llvm::raw_string_ostream os(errStr);
     if (llvm::verifyFunction(*f, &os))
-        throw CompileError(fn.loc, "codegen error in '" + fn.name + "': " + os.str());
+        throw CompileError(fn.loc, Err::CodegenFailure, {fn.name, os.str()});
 }
 
 void CodeGen::genStmt(const Stmt& s) {
@@ -93,8 +93,8 @@ void CodeGen::genStmt(const Stmt& s) {
     }
     if (auto* v = dynamic_cast<const VarDeclStmt*>(&s)) {
         if (vars_.find(v->name) != vars_.end())
-            throw CompileError(v->loc, "variable '" + v->name + "' is already declared");
-        if (v->type.name == "void") throw CompileError(v->type.loc, "variables cannot have type void");
+            throw CompileError(v->loc, Err::VariableRedeclared, {v->name});
+        if (v->type.name == "void") throw CompileError(v->type.loc, Err::VoidVariable);
         auto* slot = createAlloca(b_->GetInsertBlock()->getParent(), mapType(v->type), v->name);
         b_->CreateStore(genExpr(*v->value), slot);
         vars_[v->name] = {slot, v->isMutable};
@@ -102,8 +102,8 @@ void CodeGen::genStmt(const Stmt& s) {
     }
     if (auto* a = dynamic_cast<const AssignStmt*>(&s)) {
         auto it = vars_.find(a->name);
-        if (it == vars_.end()) throw CompileError(a->loc, "undeclared identifier '" + a->name + "'");
-        if (!it->second.isMutable) throw CompileError(a->loc, "cannot assign to immutable variable '" + a->name + "'");
+        if (it == vars_.end()) throw CompileError(a->loc, Err::UndeclaredIdentifier, {a->name});
+        if (!it->second.isMutable) throw CompileError(a->loc, Err::ImmutableAssign, {a->name});
         b_->CreateStore(genExpr(*a->value), it->second.value);
         return;
     }
@@ -112,7 +112,7 @@ void CodeGen::genStmt(const Stmt& s) {
     if (auto* l = dynamic_cast<const LoopStmt*>(&s)) { genLoop(*l); return; }
     if (auto* br = dynamic_cast<const BreakStmt*>(&s)) { genBreak(*br); return; }
     if (auto* co = dynamic_cast<const ContinueStmt*>(&s)) { genContinue(*co); return; }
-    throw CompileError(s.loc, "unhandled statement");
+    throw CompileError(s.loc, Err::UnhandledStatement);
 }
 
 void CodeGen::genStmtList(const std::vector<StmtPtr>& stmts) {
@@ -168,12 +168,12 @@ void CodeGen::genLoop(const LoopStmt& s) {
 }
 
 void CodeGen::genBreak(const BreakStmt& s) {
-    if (loopStack_.empty()) throw CompileError(s.loc, "'stop' used outside of a loop");
+    if (loopStack_.empty()) throw CompileError(s.loc, Err::BreakOutsideLoop);
     b_->CreateBr(loopStack_.back().breakBB);
 }
 
 void CodeGen::genContinue(const ContinueStmt& s) {
-    if (loopStack_.empty()) throw CompileError(s.loc, "'cont' used outside of a loop");
+    if (loopStack_.empty()) throw CompileError(s.loc, Err::ContinueOutsideLoop);
     b_->CreateBr(loopStack_.back().continueBB);
 }
 
@@ -185,12 +185,12 @@ llvm::Value* CodeGen::genExpr(const Expr& e) {
     if (auto* id = dynamic_cast<const IdentifierExpr*>(&e)) return genIdentifier(*id);
     if (auto* bin = dynamic_cast<const BinaryExpr*>(&e)) return genBinary(*bin);
     if (auto* c = dynamic_cast<const CallExpr*>(&e)) return genCall(*c);
-    throw CompileError(e.loc, "unhandled expression");
+    throw CompileError(e.loc, Err::UnhandledExpression);
 }
 
 llvm::Value* CodeGen::genIdentifier(const IdentifierExpr& i) {
     auto it = vars_.find(i.name);
-    if (it == vars_.end()) throw CompileError(i.loc, "undeclared identifier '" + i.name + "'");
+    if (it == vars_.end()) throw CompileError(i.loc, Err::UndeclaredIdentifier, {i.name});
     return b_->CreateLoad(it->second.value->getAllocatedType(), it->second.value, i.name);
 }
 
@@ -212,11 +212,11 @@ llvm::Value* CodeGen::genBinary(const BinaryExpr& e) {
     else if (e.op == ">=") cmp = b_->CreateICmpSGE(left, right, "getmp");
 
     if (cmp) return b_->CreateIntCast(cmp, llvm::Type::getInt32Ty(*ctx_), false, "booltmp");
-    throw CompileError(e.loc, "unknown binary operator '" + e.op + "'");
+    throw CompileError(e.loc, Err::UnknownBinaryOp, {e.op});
 }
 
 llvm::Value* CodeGen::genWrite(const CallExpr& c) {
-    if (c.args.size() != 1) throw CompileError(c.loc, "write() takes exactly 1 argument");
+    if (c.args.size() != 1) throw CompileError(c.loc, Err::WriteArgCount);
 
     // String literals keep the original puts() lowering.
     if (auto* s = dynamic_cast<const StringLiteralExpr*>(c.args[0].get()))
@@ -224,15 +224,15 @@ llvm::Value* CodeGen::genWrite(const CallExpr& c) {
 
     llvm::Value* val = genExpr(*c.args[0]);
     if (!val->getType()->isIntegerTy())
-        throw CompileError(c.args[0]->loc, "write() only supports string literals or int expressions");
+        throw CompileError(c.args[0]->loc, Err::WriteArgType);
     llvm::Value* fmt = b_->CreateGlobalString("%d\n", "fmt");
     return b_->CreateCall(printfFn(), {fmt, val});
 }
 
 llvm::Value* CodeGen::genUserInput(const CallExpr& c) {
-    if (c.args.size() != 1) throw CompileError(c.loc, "user_input() takes exactly 1 argument");
+    if (c.args.size() != 1) throw CompileError(c.loc, Err::UserInputArgCount);
     auto* s = dynamic_cast<const StringLiteralExpr*>(c.args[0].get());
-    if (!s) throw CompileError(c.args[0]->loc, "user_input() prompt must be a string literal");
+    if (!s) throw CompileError(c.args[0]->loc, Err::UserInputArgType);
 
     llvm::Value* promptFmt = b_->CreateGlobalString("%s", "fmt");
     b_->CreateCall(printfFn(), {promptFmt, b_->CreateGlobalString(s->value, "str")});
@@ -252,9 +252,9 @@ llvm::Value* CodeGen::genUserInput(const CallExpr& c) {
 }
 
 llvm::Value* CodeGen::genTerminalPause(const CallExpr& c) {
-    if (c.args.size() > 1) throw CompileError(c.loc, "terminal.pause() takes at most 1 argument");
+    if (c.args.size() > 1) throw CompileError(c.loc, Err::TerminalPauseArgCount);
     if (c.args.size() == 1 && !dynamic_cast<const IdentifierExpr*>(c.args[0].get()))
-        throw CompileError(c.args[0]->loc, "terminal.pause() argument is just a placeholder name");
+        throw CompileError(c.args[0]->loc, Err::TerminalPauseArgType);
     b_->CreateCall(putsFn(), {b_->CreateGlobalString("Press Enter to continue...", "str")});
     return b_->CreateCall(getcharFn(), {});
 }
@@ -264,12 +264,12 @@ llvm::Value* CodeGen::genCall(const CallExpr& c) {
     if (c.callee == "terminal.pause") return genTerminalPause(c);
     if (c.callee == "user_input") return genUserInput(c);
     auto it = fns_.find(c.callee);
-    if (it == fns_.end()) throw CompileError(c.loc, "call to undeclared function '" + c.callee + "'");
+    if (it == fns_.end()) throw CompileError(c.loc, Err::UndeclaredFunction, {c.callee});
 
     llvm::Function* f = it->second;
     if (c.args.size() != f->arg_size())
-        throw CompileError(c.loc, "'" + c.callee + "' expects " + std::to_string(f->arg_size()) +
-                                       " argument(s), got " + std::to_string(c.args.size()));
+        throw CompileError(c.loc, Err::ArgCountMismatch,
+                            {c.callee, std::to_string(f->arg_size()), std::to_string(c.args.size())});
 
     std::vector<llvm::Value*> args;
     for (auto& a : c.args) args.push_back(genExpr(*a));

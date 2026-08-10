@@ -2,6 +2,7 @@ add_executable(shine_tests
     test_main.cpp
     test_lexer.cpp
     test_parser.cpp
+    ${CMAKE_SOURCE_DIR}/src/error.cpp
     ${CMAKE_SOURCE_DIR}/src/lexer.cpp
     ${CMAKE_SOURCE_DIR}/src/parser.cpp
 )

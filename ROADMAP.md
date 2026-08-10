@@ -25,7 +25,7 @@
     - Any int-valued expression can now be passed to `write()`
 
 ## v0.5.0 - Error Handling
-- [ ] Better default error messages
+- [x] Better default error messages for compiler
 - [ ] General improvements to error handling
 
 ## v0.6.0 - real types

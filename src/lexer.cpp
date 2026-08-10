@@ -79,6 +79,10 @@ void Lexer::err(const std::string& msg) const {
     throw CompileError({file_, line_, col_}, msg);
 }
 
+void Lexer::err(Err code, const std::vector<std::string>& args) const {
+    throw CompileError({file_, line_, col_}, code, args);
+}
+
 void Lexer::skipTrivia() {
     for (;;) {
         char c = peek();
@@ -87,7 +91,7 @@ void Lexer::skipTrivia() {
         if (c == '/' && peek(1) == '*') {
             advance(); advance();
             while (!atEnd() && !(peek() == '*' && peek(1) == '/')) advance();
-            if (atEnd()) err("unterminated comment");
+            if (atEnd()) err(Err::UnterminatedComment);
             advance(); advance();
             continue;
         }
@@ -123,16 +127,16 @@ Token Lexer::str() {
     while (!atEnd() && peek() != '"') {
         char ch = advance();
         if (ch != '\\') { v += ch; continue; }
-        if (atEnd()) err("unterminated string");
+        if (atEnd()) err(Err::UnterminatedString);
         switch (advance()) {
             case 'n': v += '\n'; break;
             case 't': v += '\t'; break;
             case '"': v += '"'; break;
             case '\\': v += '\\'; break;
-            default: err("bad escape sequence");
+            default: err(Err::BadEscapeSequence);
         }
     }
-    if (atEnd()) err("unterminated string");
+    if (atEnd()) err(Err::UnterminatedString);
     advance();
     return {TokenKind::StringLiteral, v, 0, {file_, l, c}};
 }
@@ -169,7 +173,7 @@ std::vector<Token> Lexer::tokenize() {
             case '!':
                 advance();
                 if (match('=')) tok(TokenKind::BangEqual, "!=");
-                else err("unexpected '!'");
+                else err(Err::UnexpectedChar, {"!"});
                 break;
             case '<':
                 advance();
@@ -186,7 +190,7 @@ std::vector<Token> Lexer::tokenize() {
                 if (match('>')) tok(TokenKind::Arrow, "->");
                 else tok(TokenKind::Minus, "-");
                 break;
-            default: err(std::string("unexpected character '") + c + "'");
+            default: err(Err::UnexpectedChar, {std::string(1, c)});
         }
     }
     out.push_back({TokenKind::EndOfFile, "", 0, {file_, line_, col_}});
