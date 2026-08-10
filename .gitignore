@@ -3,4 +3,6 @@ build/
 *.obj
 *.exe
 *.md
+*.ico
+LICENSE
 compile_commands.json
