@@ -1,8 +1,13 @@
 fn int main() {
+
+	// declare all the variables
 	var(int) num1 = user_input("Pick a number  ");
 	var(int) num2 = user_input("Pick a second number  ");
 	var(int) op = user_input("What operator do you want? 1 = +, 2 = -, 3 = *, 4 = /  ");
+	// declare a variable to hold a temp number we will change later
 	var(int) product = 0;
+	// declare a variable to check if the operator is valid
+	// this variable will be changed to 0 if the operator is invalid AKA above 4 or below 1
 	var(int) validop = 1;
 	
 	if (op == 1) {
@@ -17,15 +22,19 @@ fn int main() {
 	else if (op == 4) {
 		product = num1 / num2;
 	} else {
+		// change validop to 0 to indicate that the operator is invalid and write an error message to the user
 		validop = 0;
 		write("No valid number entered for the operator. Please retry and enter a valid input.");
 	}
 	
+	// write the product so the user can see it, only if the operator is valid
 	if (validop == 1) {
 		write(product);
 	}
 	
+	// pause the terminal so the user can see the output before the program exits
 	terminal.pause(user_action);
 	
+	// return 0 to the OS to indicate that the program ran successfully
 	r/0;
 }
