@@ -247,6 +247,12 @@ int main(int argc, char** argv) {
         return 0;
     } catch (const CompileError& e) {
         std::cerr << e.what() << "\n";
+        std::ifstream lf(e.loc().file, std::ios::binary);
+        if (lf) {
+            std::string line;
+            for (int i = 0; i < e.loc().line && std::getline(lf, line); i++) {}
+            if (!line.empty()) std::cerr << "    " << line << "\n";
+        }
         return 1;
     }
 }

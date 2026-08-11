@@ -27,8 +27,11 @@ bool Parser::match(TokenKind k) {
 }
 
 const Token& Parser::expect(TokenKind k, const std::string& ctx) {
-    if (!check(k))
+    if (!check(k)) {
+        if (k == TokenKind::Semicolon)
+            err(peek(-1), Err::ExpectedToken, {tokenName(k), ctx, tokenName(peek().kind)});
         err(peek(), Err::ExpectedToken, {tokenName(k), ctx, tokenName(peek().kind)});
+    }
     return advance();
 }
 

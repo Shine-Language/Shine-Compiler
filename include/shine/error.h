@@ -51,6 +51,8 @@ enum class Err {
 
 std::string defaultMessage(Err code, const std::vector<std::string>& args = {});
 
+std::string suggestClosest(const std::string& name, const std::vector<std::string>& candidates);
+
 class CompileError : public std::runtime_error {
 public:
     CompileError(SourceLoc loc, std::string msg)

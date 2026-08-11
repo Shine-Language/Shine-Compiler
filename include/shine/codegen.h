@@ -47,6 +47,8 @@ private:
     llvm::Function* getcharFn();
     llvm::Function* printfFn();
     llvm::Function* scanfFn();
+    std::vector<std::string> varNames() const;
+    std::vector<std::string> fnNames() const;
 
     std::unique_ptr<llvm::LLVMContext> ctx_;
     std::unique_ptr<llvm::Module> mod_;

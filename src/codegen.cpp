@@ -102,7 +102,8 @@ void CodeGen::genStmt(const Stmt& s) {
     }
     if (auto* a = dynamic_cast<const AssignStmt*>(&s)) {
         auto it = vars_.find(a->name);
-        if (it == vars_.end()) throw CompileError(a->loc, Err::UndeclaredIdentifier, {a->name});
+        if (it == vars_.end())
+            throw CompileError(a->loc, Err::UndeclaredIdentifier, {a->name, suggestClosest(a->name, varNames())});
         if (!it->second.isMutable) throw CompileError(a->loc, Err::ImmutableAssign, {a->name});
         b_->CreateStore(genExpr(*a->value), it->second.value);
         return;
@@ -190,7 +191,8 @@ llvm::Value* CodeGen::genExpr(const Expr& e) {
 
 llvm::Value* CodeGen::genIdentifier(const IdentifierExpr& i) {
     auto it = vars_.find(i.name);
-    if (it == vars_.end()) throw CompileError(i.loc, Err::UndeclaredIdentifier, {i.name});
+    if (it == vars_.end())
+        throw CompileError(i.loc, Err::UndeclaredIdentifier, {i.name, suggestClosest(i.name, varNames())});
     return b_->CreateLoad(it->second.value->getAllocatedType(), it->second.value, i.name);
 }
 
@@ -264,7 +266,8 @@ llvm::Value* CodeGen::genCall(const CallExpr& c) {
     if (c.callee == "terminal.pause") return genTerminalPause(c);
     if (c.callee == "user_input") return genUserInput(c);
     auto it = fns_.find(c.callee);
-    if (it == fns_.end()) throw CompileError(c.loc, Err::UndeclaredFunction, {c.callee});
+    if (it == fns_.end())
+        throw CompileError(c.loc, Err::UndeclaredFunction, {c.callee, suggestClosest(c.callee, fnNames())});
 
     llvm::Function* f = it->second;
     if (c.args.size() != f->arg_size())
@@ -274,6 +277,18 @@ llvm::Value* CodeGen::genCall(const CallExpr& c) {
     std::vector<llvm::Value*> args;
     for (auto& a : c.args) args.push_back(genExpr(*a));
     return b_->CreateCall(f, args);
+}
+
+std::vector<std::string> CodeGen::varNames() const {
+    std::vector<std::string> names;
+    for (auto& [k, v] : vars_) names.push_back(k);
+    return names;
+}
+
+std::vector<std::string> CodeGen::fnNames() const {
+    std::vector<std::string> names;
+    for (auto& [k, v] : fns_) names.push_back(k);
+    return names;
 }
 
 std::unique_ptr<llvm::Module> CodeGen::generate(const Module& mod) {
