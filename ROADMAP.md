@@ -26,7 +26,7 @@
 
 ## v0.5.0 - Error Handling
 - [x] Better default error messages for compiler
-- [ ] General improvements to error handling
+- [x] General improvements to error handling
 
 ## v0.6.0 - real types
 - [ ] Type hierarchy instead of string-named TypeRef
