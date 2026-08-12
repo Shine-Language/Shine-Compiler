@@ -6,5 +6,4 @@ build/
 *.ico
 LICENSE
 compile_commands.json
-test_errors.sh
 dist/
