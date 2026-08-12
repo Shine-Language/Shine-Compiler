@@ -3,10 +3,15 @@
 #include <string>
 #include <vector>
 #include "shine/token.h"
+#include "shine/type.h"
 
 namespace shine {
 
-struct TypeRef { std::string name; SourceLoc loc; };
+struct TypeRef {
+    std::string name;
+    Type type;
+    SourceLoc loc;
+};
 
 struct Expr { virtual ~Expr() = default; SourceLoc loc; };
 using ExprPtr = std::unique_ptr<Expr>;

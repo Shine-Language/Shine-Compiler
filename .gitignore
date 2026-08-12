@@ -7,3 +7,4 @@ build/
 LICENSE
 compile_commands.json
 test_errors.sh
+dist/

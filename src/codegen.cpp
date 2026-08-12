@@ -10,8 +10,10 @@ CodeGen::CodeGen()
       b_(std::make_unique<llvm::IRBuilder<>>(*ctx_)) {}
 
 llvm::Type* CodeGen::mapType(const TypeRef& t) {
-    if (t.name == "int") return llvm::Type::getInt32Ty(*ctx_);
-    if (t.name == "void") return llvm::Type::getVoidTy(*ctx_);
+    switch (t.type.kind) {
+        case TypeKind::Void: return llvm::Type::getVoidTy(*ctx_);
+        case TypeKind::Int:  return llvm::Type::getIntNTy(*ctx_, t.type.bitWidth);
+    }
     throw CompileError(t.loc, Err::UnknownType, {t.name});
 }
 
@@ -94,7 +96,7 @@ void CodeGen::genStmt(const Stmt& s) {
     if (auto* v = dynamic_cast<const VarDeclStmt*>(&s)) {
         if (vars_.find(v->name) != vars_.end())
             throw CompileError(v->loc, Err::VariableRedeclared, {v->name});
-        if (v->type.name == "void") throw CompileError(v->type.loc, Err::VoidVariable);
+        if (v->type.type.isVoid()) throw CompileError(v->type.loc, Err::VoidVariable);
         auto* slot = createAlloca(b_->GetInsertBlock()->getParent(), mapType(v->type), v->name);
         b_->CreateStore(genExpr(*v->value), slot);
         vars_[v->name] = {slot, v->isMutable};

@@ -50,8 +50,15 @@ Module Parser::parseModule(std::string file) {
 }
 
 TypeRef Parser::type() {
-    if (check(TokenKind::KwInt)) return {"int", advance().loc};
-    if (check(TokenKind::KwVoid)) return {"void", advance().loc};
+    if (check(TokenKind::KwInt) || check(TokenKind::KwVoid)) {
+        const Token& t = advance();
+        std::string name = t.kind == TokenKind::KwInt ? "int" : "void";
+        TypeRef ref{name, {}, t.loc};
+        // KwInt/KwVoid are always resolvable; resolveTypeName is the single
+        // source of truth so this stays correct as more spellings are added.
+        resolveTypeName(name, ref.type);
+        return ref;
+    }
     err(peek(), Err::ExpectedType);
 }
 
