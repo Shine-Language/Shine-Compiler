@@ -44,6 +44,11 @@ private:
     llvm::Value* genUserInput(const CallExpr& c);
     llvm::Value* genAddressOf(const AddressOfExpr& e);
     llvm::Value* genDeref(const DerefExpr& e);
+    struct PtrInfo { llvm::Value* ptr; Type pointeeType; };
+    // Evaluates any pointer-valued expression (identifier, or a deref that
+    // itself yields a pointer, e.g. the `ppx` in `**ppx`) down to the
+    // concrete address it points to plus that address's pointee type.
+    PtrInfo genPointerExpr(const Expr& e);
     llvm::Value* castToType(llvm::Value* v, llvm::Type* target, bool isSigned);
     llvm::Type* llvmType(const Type& t);
     llvm::Type* mapType(const TypeRef& t);

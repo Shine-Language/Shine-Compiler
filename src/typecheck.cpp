@@ -125,6 +125,12 @@ void TypeChecker::checkStmt(const Stmt& s) {
         checkAssignable(*a->value, it->second.type, a->value->loc);
         return;
     }
+    if (auto* da = dynamic_cast<const DerefAssignStmt*>(&s)) {
+        Type ptrTy = inferExpr(*da->target);
+        if (!ptrTy.isPointer()) throw CompileError(da->loc, Err::DerefNonPointer, {ptrTy.canonicalName()});
+        checkAssignable(*da->value, *ptrTy.pointee, da->value->loc);
+        return;
+    }
     if (auto* e = dynamic_cast<const ExprStmt*>(&s)) { inferExpr(*e->expr); return; }
     if (auto* i = dynamic_cast<const IfStmt*>(&s)) { checkIf(*i); return; }
     if (auto* l = dynamic_cast<const LoopStmt*>(&s)) { checkLoop(*l); return; }

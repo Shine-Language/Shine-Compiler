@@ -36,6 +36,7 @@ struct VarDeclStmt : Stmt {
     ExprPtr value;
 };
 struct AssignStmt : Stmt { std::string name; ExprPtr value; };
+struct DerefAssignStmt : Stmt { ExprPtr target; ExprPtr value; };
 struct IfStmt : Stmt {
     ExprPtr cond;
     std::vector<StmtPtr> thenBody;

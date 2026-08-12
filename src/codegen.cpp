@@ -125,6 +125,19 @@ void CodeGen::genStmt(const Stmt& s) {
         b_->CreateStore(val, it->second.value);
         return;
     }
+    if (auto* da = dynamic_cast<const DerefAssignStmt*>(&s)) {
+        auto* id = dynamic_cast<const IdentifierExpr*>(da->target.get());
+        if (!id) throw CompileError(da->loc, Err::DerefNonVariable);
+        auto it = vars_.find(id->name);
+        if (it == vars_.end())
+            throw CompileError(id->loc, Err::UndeclaredIdentifier, {id->name, suggestClosest(id->name, varNames())});
+        if (!it->second.type.isPointer()) throw CompileError(da->loc, Err::DerefNonPointer, {id->name});
+        llvm::Value* ptrVal = b_->CreateLoad(llvm::PointerType::getUnqual(*ctx_), it->second.value, id->name);
+        llvm::Type* pointeeTy = llvmType(*it->second.type.pointee);
+        llvm::Value* val = castToType(genExpr(*da->value), pointeeTy, it->second.type.pointee->isSigned);
+        b_->CreateStore(val, ptrVal);
+        return;
+    }
     if (auto* e = dynamic_cast<const ExprStmt*>(&s)) { genExpr(*e->expr); return; }
     if (auto* i = dynamic_cast<const IfStmt*>(&s)) { genIf(*i); return; }
     if (auto* l = dynamic_cast<const LoopStmt*>(&s)) { genLoop(*l); return; }
@@ -196,8 +209,14 @@ void CodeGen::genContinue(const ContinueStmt& s) {
 }
 
 llvm::Value* CodeGen::genExpr(const Expr& e) {
-    if (auto* i = dynamic_cast<const IntLiteralExpr*>(&e))
-        return llvm::ConstantInt::get(llvm::Type::getInt32Ty(*ctx_), i->value, true);
+    if (auto* i = dynamic_cast<const IntLiteralExpr*>(&e)) {
+        // Literals that don't fit in 32 bits (e.g. i64 initializers) must be
+        // materialized at 64 bits — otherwise the value is truncated here,
+        // before any later widening cast ever sees the real magnitude.
+        bool fits32 = i->value >= INT32_MIN && i->value <= INT32_MAX;
+        llvm::Type* ty = fits32 ? llvm::Type::getInt32Ty(*ctx_) : llvm::Type::getInt64Ty(*ctx_);
+        return llvm::ConstantInt::get(ty, (uint64_t)i->value, true);
+    }
     if (auto* s = dynamic_cast<const StringLiteralExpr*>(&e))
         return b_->CreateGlobalString(s->value, "str");
     if (auto* id = dynamic_cast<const IdentifierExpr*>(&e)) return genIdentifier(*id);
@@ -217,16 +236,28 @@ llvm::Value* CodeGen::genAddressOf(const AddressOfExpr& e) {
     return it->second.value;
 }
 
+CodeGen::PtrInfo CodeGen::genPointerExpr(const Expr& e) {
+    if (auto* id = dynamic_cast<const IdentifierExpr*>(&e)) {
+        auto it = vars_.find(id->name);
+        if (it == vars_.end())
+            throw CompileError(id->loc, Err::UndeclaredIdentifier, {id->name, suggestClosest(id->name, varNames())});
+        if (!it->second.type.isPointer()) throw CompileError(id->loc, Err::DerefNonPointer, {id->name});
+        llvm::Value* ptrVal = b_->CreateLoad(llvm::PointerType::getUnqual(*ctx_), it->second.value, id->name);
+        return {ptrVal, *it->second.type.pointee};
+    }
+    if (auto* de = dynamic_cast<const DerefExpr*>(&e)) {
+        PtrInfo inner = genPointerExpr(*de->operand);
+        if (!inner.pointeeType.isPointer()) throw CompileError(de->loc, Err::DerefNonPointer, {inner.pointeeType.canonicalName()});
+        llvm::Value* val = b_->CreateLoad(llvmType(inner.pointeeType), inner.ptr, "ptr");
+        return {val, *inner.pointeeType.pointee};
+    }
+    throw CompileError(e.loc, Err::DerefNonVariable);
+}
+
 llvm::Value* CodeGen::genDeref(const DerefExpr& e) {
-    auto* id = dynamic_cast<const IdentifierExpr*>(e.operand.get());
-    if (!id) throw CompileError(e.loc, Err::DerefNonVariable);
-    auto it = vars_.find(id->name);
-    if (it == vars_.end())
-        throw CompileError(id->loc, Err::UndeclaredIdentifier, {id->name, suggestClosest(id->name, varNames())});
-    if (!it->second.type.isPointer()) throw CompileError(e.loc, Err::DerefNonPointer, {id->name});
-    llvm::Value* ptrVal = b_->CreateLoad(llvm::PointerType::getUnqual(*ctx_), it->second.value, id->name);
-    llvm::Type* pointeeTy = llvmType(*it->second.type.pointee);
-    return b_->CreateLoad(pointeeTy, ptrVal, "deref");
+    PtrInfo info = genPointerExpr(*e.operand);
+    llvm::Type* pointeeTy = llvmType(info.pointeeType);
+    return b_->CreateLoad(pointeeTy, info.ptr, "deref");
 }
 
 llvm::Value* CodeGen::genIdentifier(const IdentifierExpr& i) {
@@ -267,6 +298,15 @@ llvm::Value* CodeGen::genWrite(const CallExpr& c) {
     llvm::Value* val = genExpr(*c.args[0]);
     if (!val->getType()->isIntegerTy())
         throw CompileError(c.args[0]->loc, Err::WriteArgType);
+
+    // Fixed-width ints wider than 32 bits must not be narrowed before
+    // printing (that silently truncates values like i64) and need the
+    // matching printf length modifier.
+    if (val->getType()->getIntegerBitWidth() > 32) {
+        val = castToType(val, llvm::Type::getInt64Ty(*ctx_), true);
+        llvm::Value* fmt = b_->CreateGlobalString("%lld\n", "fmt");
+        return b_->CreateCall(printfFn(), {fmt, val});
+    }
     val = castToType(val, llvm::Type::getInt32Ty(*ctx_), true);
     llvm::Value* fmt = b_->CreateGlobalString("%d\n", "fmt");
     return b_->CreateCall(printfFn(), {fmt, val});

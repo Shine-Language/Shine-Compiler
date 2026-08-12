@@ -26,6 +26,7 @@ private:
     StmtPtr returnStmt();
     StmtPtr varDecl();
     StmtPtr assignStmt();
+    StmtPtr derefAssignStmt();
     StmtPtr ifStmt();
     StmtPtr loopStmt();
     StmtPtr breakStmt();

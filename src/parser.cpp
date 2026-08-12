@@ -52,6 +52,11 @@ Module Parser::parseModule(std::string file) {
 TypeRef Parser::type() {
     std::string name;
     SourceLoc loc;
+    int prefixStars = 0;
+    while (check(TokenKind::Star)) {
+        prefixStars++;
+        loc = advance().loc;
+    }
     if (check(TokenKind::KwInt) || check(TokenKind::KwVoid)) {
         const Token& t = advance();
         name = t.kind == TokenKind::KwInt ? "int" : "void";
@@ -68,6 +73,10 @@ TypeRef Parser::type() {
 
     TypeRef ref{name, {}, loc};
     resolveTypeName(name, ref.type);
+    for (int i = 0; i < prefixStars; ++i) {
+        ref.type = Type::makePointer(ref.type);
+        ref.name = "*" + ref.name;
+    }
     while (match(TokenKind::Star)) {
         ref.type = Type::makePointer(ref.type);
         ref.name += "*";
@@ -111,6 +120,8 @@ StmtPtr Parser::stmt() {
     if (check(TokenKind::KwStop)) return breakStmt();
     if (check(TokenKind::KwCont)) return contStmt();
     if (check(TokenKind::Identifier) && peek(1).kind == TokenKind::Equal) return assignStmt();
+    if (check(TokenKind::Star) && peek(1).kind == TokenKind::Identifier && peek(2).kind == TokenKind::Equal)
+        return derefAssignStmt();
     auto s = std::make_unique<ExprStmt>();
     s->loc = peek().loc;
     s->expr = expr();
@@ -196,6 +207,21 @@ StmtPtr Parser::assignStmt() {
     s->loc = name.loc;
     s->name = name.text;
     expect(TokenKind::Equal, "after variable name");
+    s->value = expr();
+    expect(TokenKind::Semicolon, "after assignment");
+    return s;
+}
+
+StmtPtr Parser::derefAssignStmt() {
+    const Token& star = advance();
+    auto s = std::make_unique<DerefAssignStmt>();
+    s->loc = star.loc;
+    const Token& name = expect(TokenKind::Identifier, "as pointer name");
+    auto target = std::make_unique<IdentifierExpr>();
+    target->loc = name.loc;
+    target->name = name.text;
+    s->target = std::move(target);
+    expect(TokenKind::Equal, "after dereferenced pointer");
     s->value = expr();
     expect(TokenKind::Semicolon, "after assignment");
     return s;
