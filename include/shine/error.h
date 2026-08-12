@@ -28,6 +28,9 @@ enum class Err {
     AddressOfNonVariable,
     DerefNonVariable,
     DerefNonPointer,
+    TypeMismatch,
+    ReturnTypeMismatch,
+    VoidExpression,
 
     // codegen: functions & calls
     UndeclaredFunction,

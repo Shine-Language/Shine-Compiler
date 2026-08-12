@@ -25,6 +25,9 @@ const char* templateFor(Err code) {
         case Err::AddressOfNonVariable:   return "'&' can only be applied to a variable";
         case Err::DerefNonVariable:       return "'*' can only dereference a variable";
         case Err::DerefNonPointer:        return "cannot dereference non-pointer '{}'";
+        case Err::TypeMismatch:           return "expected type '{}', got '{}'";
+        case Err::ReturnTypeMismatch:     return "function '{}' expects return type '{}', got '{}'";
+        case Err::VoidExpression:         return "expression cannot have type void";
 
         case Err::UndeclaredFunction:     return "call to undeclared function '{}'{}";
         case Err::ArgCountMismatch:       return "'{}' expects {} argument(s), got {}";

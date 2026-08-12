@@ -22,6 +22,7 @@ add_executable(shinec
     src/error.cpp
     src/lexer.cpp
     src/parser.cpp
+    src/typecheck.cpp
     src/codegen.cpp
     src/main.cpp
 )

@@ -20,6 +20,7 @@
 #include "shine/error.h"
 #include "shine/lexer.h"
 #include "shine/parser.h"
+#include "shine/typecheck.h"
 
 using namespace shine;
 
@@ -235,6 +236,8 @@ int main(int argc, char** argv) {
         Lexer lex(readFile(in), in);
         Parser parser(lex.tokenize());
         Module mod = parser.parseModule(in);
+
+        TypeChecker().check(mod);
 
         CodeGen cg;
         auto ir = cg.generate(mod);
