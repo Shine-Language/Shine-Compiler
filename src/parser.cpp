@@ -50,16 +50,29 @@ Module Parser::parseModule(std::string file) {
 }
 
 TypeRef Parser::type() {
+    std::string name;
+    SourceLoc loc;
     if (check(TokenKind::KwInt) || check(TokenKind::KwVoid)) {
         const Token& t = advance();
-        std::string name = t.kind == TokenKind::KwInt ? "int" : "void";
-        TypeRef ref{name, {}, t.loc};
-        // KwInt/KwVoid are always resolvable; resolveTypeName is the single
-        // source of truth so this stays correct as more spellings are added.
-        resolveTypeName(name, ref.type);
-        return ref;
+        name = t.kind == TokenKind::KwInt ? "int" : "void";
+        loc = t.loc;
+    } else if (check(TokenKind::Identifier)) {
+        Type probe;
+        if (!resolveTypeName(peek().text, probe)) err(peek(), Err::ExpectedType);
+        const Token& t = advance();
+        name = t.text;
+        loc = t.loc;
+    } else {
+        err(peek(), Err::ExpectedType);
     }
-    err(peek(), Err::ExpectedType);
+
+    TypeRef ref{name, {}, loc};
+    resolveTypeName(name, ref.type);
+    while (match(TokenKind::Star)) {
+        ref.type = Type::makePointer(ref.type);
+        ref.name += "*";
+    }
+    return ref;
 }
 
 Param Parser::param() {
@@ -237,12 +250,30 @@ ExprPtr Parser::term() {
 }
 
 ExprPtr Parser::factor() {
-    auto left = primary();
+    auto left = unary();
     while (check(TokenKind::Star) || check(TokenKind::Slash)) {
         const Token& op = advance();
-        left = binaryExpr(op, std::move(left), primary());
+        left = binaryExpr(op, std::move(left), unary());
     }
     return left;
+}
+
+ExprPtr Parser::unary() {
+    if (check(TokenKind::Amp)) {
+        const Token& op = advance();
+        auto e = std::make_unique<AddressOfExpr>();
+        e->loc = op.loc;
+        e->operand = unary();
+        return e;
+    }
+    if (check(TokenKind::Star)) {
+        const Token& op = advance();
+        auto e = std::make_unique<DerefExpr>();
+        e->loc = op.loc;
+        e->operand = unary();
+        return e;
+    }
+    return primary();
 }
 
 ExprPtr Parser::primary() {

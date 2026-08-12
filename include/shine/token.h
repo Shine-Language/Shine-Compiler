@@ -9,7 +9,7 @@ enum class TokenKind {
     KwFn, KwReturn, KwLet, KwVar, KwInt, KwVoid,
     KwIf, KwElse, KwLoop, KwStop, KwCont,
     LParen, RParen, LBrace, RBrace, Semicolon, Comma, Colon, Dot, Arrow,
-    Equal, Plus, Minus, Star, Slash,
+    Equal, Plus, Minus, Star, Slash, Amp,
     EqualEqual, BangEqual, Less, LessEqual, Greater, GreaterEqual,
     EndOfFile, Invalid,
 };

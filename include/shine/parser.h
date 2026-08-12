@@ -36,6 +36,7 @@ private:
     ExprPtr comparison();
     ExprPtr term();
     ExprPtr factor();
+    ExprPtr unary();
     ExprPtr primary();
 
     [[noreturn]] void err(const Token& t, const std::string& msg) const;

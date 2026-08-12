@@ -21,6 +21,8 @@ struct StringLiteralExpr : Expr { std::string value; };
 struct IdentifierExpr : Expr { std::string name; };
 struct CallExpr : Expr { std::string callee; std::vector<ExprPtr> args; };
 struct BinaryExpr : Expr { std::string op; ExprPtr left; ExprPtr right; };
+struct AddressOfExpr : Expr { ExprPtr operand; };
+struct DerefExpr : Expr { ExprPtr operand; };
 
 struct Stmt { virtual ~Stmt() = default; SourceLoc loc; };
 using StmtPtr = std::unique_ptr<Stmt>;

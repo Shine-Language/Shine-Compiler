@@ -9,12 +9,25 @@ CodeGen::CodeGen()
       mod_(std::make_unique<llvm::Module>("shine_module", *ctx_)),
       b_(std::make_unique<llvm::IRBuilder<>>(*ctx_)) {}
 
-llvm::Type* CodeGen::mapType(const TypeRef& t) {
-    switch (t.type.kind) {
-        case TypeKind::Void: return llvm::Type::getVoidTy(*ctx_);
-        case TypeKind::Int:  return llvm::Type::getIntNTy(*ctx_, t.type.bitWidth);
+llvm::Type* CodeGen::llvmType(const Type& t) {
+    switch (t.kind) {
+        case TypeKind::Void:    return llvm::Type::getVoidTy(*ctx_);
+        case TypeKind::Int:     return llvm::Type::getIntNTy(*ctx_, t.bitWidth);
+        case TypeKind::Pointer: return llvm::PointerType::getUnqual(*ctx_);
     }
+    return nullptr;
+}
+
+llvm::Type* CodeGen::mapType(const TypeRef& t) {
+    if (llvm::Type* ty = llvmType(t.type)) return ty;
     throw CompileError(t.loc, Err::UnknownType, {t.name});
+}
+
+llvm::Value* CodeGen::castToType(llvm::Value* v, llvm::Type* target, bool isSigned) {
+    if (v->getType() == target) return v;
+    if (v->getType()->isIntegerTy() && target->isIntegerTy())
+        return b_->CreateIntCast(v, target, isSigned, "cast");
+    return v;
 }
 
 llvm::AllocaInst* CodeGen::createAlloca(llvm::Function* f, llvm::Type* ty, const std::string& name) {
@@ -70,7 +83,7 @@ void CodeGen::defineFn(const FunctionDecl& fn) {
         arg.setName(fn.params[i].name);
         auto* slot = createAlloca(f, arg.getType(), fn.params[i].name);
         b_->CreateStore(&arg, slot);
-        vars_[fn.params[i].name] = {slot, false};
+        vars_[fn.params[i].name] = {slot, false, fn.params[i].type.type};
         i++;
     }
 
@@ -97,9 +110,10 @@ void CodeGen::genStmt(const Stmt& s) {
         if (vars_.find(v->name) != vars_.end())
             throw CompileError(v->loc, Err::VariableRedeclared, {v->name});
         if (v->type.type.isVoid()) throw CompileError(v->type.loc, Err::VoidVariable);
-        auto* slot = createAlloca(b_->GetInsertBlock()->getParent(), mapType(v->type), v->name);
-        b_->CreateStore(genExpr(*v->value), slot);
-        vars_[v->name] = {slot, v->isMutable};
+        llvm::Type* ty = mapType(v->type);
+        auto* slot = createAlloca(b_->GetInsertBlock()->getParent(), ty, v->name);
+        b_->CreateStore(castToType(genExpr(*v->value), ty, v->type.type.isSigned), slot);
+        vars_[v->name] = {slot, v->isMutable, v->type.type};
         return;
     }
     if (auto* a = dynamic_cast<const AssignStmt*>(&s)) {
@@ -107,7 +121,8 @@ void CodeGen::genStmt(const Stmt& s) {
         if (it == vars_.end())
             throw CompileError(a->loc, Err::UndeclaredIdentifier, {a->name, suggestClosest(a->name, varNames())});
         if (!it->second.isMutable) throw CompileError(a->loc, Err::ImmutableAssign, {a->name});
-        b_->CreateStore(genExpr(*a->value), it->second.value);
+        llvm::Value* val = castToType(genExpr(*a->value), it->second.value->getAllocatedType(), it->second.type.isSigned);
+        b_->CreateStore(val, it->second.value);
         return;
     }
     if (auto* e = dynamic_cast<const ExprStmt*>(&s)) { genExpr(*e->expr); return; }
@@ -188,7 +203,30 @@ llvm::Value* CodeGen::genExpr(const Expr& e) {
     if (auto* id = dynamic_cast<const IdentifierExpr*>(&e)) return genIdentifier(*id);
     if (auto* bin = dynamic_cast<const BinaryExpr*>(&e)) return genBinary(*bin);
     if (auto* c = dynamic_cast<const CallExpr*>(&e)) return genCall(*c);
+    if (auto* ao = dynamic_cast<const AddressOfExpr*>(&e)) return genAddressOf(*ao);
+    if (auto* de = dynamic_cast<const DerefExpr*>(&e)) return genDeref(*de);
     throw CompileError(e.loc, Err::UnhandledExpression);
+}
+
+llvm::Value* CodeGen::genAddressOf(const AddressOfExpr& e) {
+    auto* id = dynamic_cast<const IdentifierExpr*>(e.operand.get());
+    if (!id) throw CompileError(e.loc, Err::AddressOfNonVariable);
+    auto it = vars_.find(id->name);
+    if (it == vars_.end())
+        throw CompileError(id->loc, Err::UndeclaredIdentifier, {id->name, suggestClosest(id->name, varNames())});
+    return it->second.value;
+}
+
+llvm::Value* CodeGen::genDeref(const DerefExpr& e) {
+    auto* id = dynamic_cast<const IdentifierExpr*>(e.operand.get());
+    if (!id) throw CompileError(e.loc, Err::DerefNonVariable);
+    auto it = vars_.find(id->name);
+    if (it == vars_.end())
+        throw CompileError(id->loc, Err::UndeclaredIdentifier, {id->name, suggestClosest(id->name, varNames())});
+    if (!it->second.type.isPointer()) throw CompileError(e.loc, Err::DerefNonPointer, {id->name});
+    llvm::Value* ptrVal = b_->CreateLoad(llvm::PointerType::getUnqual(*ctx_), it->second.value, id->name);
+    llvm::Type* pointeeTy = llvmType(*it->second.type.pointee);
+    return b_->CreateLoad(pointeeTy, ptrVal, "deref");
 }
 
 llvm::Value* CodeGen::genIdentifier(const IdentifierExpr& i) {
@@ -229,6 +267,7 @@ llvm::Value* CodeGen::genWrite(const CallExpr& c) {
     llvm::Value* val = genExpr(*c.args[0]);
     if (!val->getType()->isIntegerTy())
         throw CompileError(c.args[0]->loc, Err::WriteArgType);
+    val = castToType(val, llvm::Type::getInt32Ty(*ctx_), true);
     llvm::Value* fmt = b_->CreateGlobalString("%d\n", "fmt");
     return b_->CreateCall(printfFn(), {fmt, val});
 }
@@ -277,7 +316,10 @@ llvm::Value* CodeGen::genCall(const CallExpr& c) {
                             {c.callee, std::to_string(f->arg_size()), std::to_string(c.args.size())});
 
     std::vector<llvm::Value*> args;
-    for (auto& a : c.args) args.push_back(genExpr(*a));
+    for (size_t i = 0; i < c.args.size(); i++) {
+        llvm::Value* v = genExpr(*c.args[i]);
+        args.push_back(castToType(v, f->getFunctionType()->getParamType(i), true));
+    }
     return b_->CreateCall(f, args);
 }
 

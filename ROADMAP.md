@@ -30,7 +30,7 @@
 
 ## v0.6.0 - real types
 - [x] Type hierarchy instead of string-named TypeRef
-- [ ] Pointers, fixed-width ints
+- [x] Pointers, fixed-width ints
 - [ ] Type-checking pass (codegen currently does no validation of its own)
 
 ## Later (Will be added in the future)

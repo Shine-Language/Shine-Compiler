@@ -43,6 +43,7 @@ const char* tokenName(TokenKind k) {
         case TokenKind::Minus: return "'-'";
         case TokenKind::Star: return "'*'";
         case TokenKind::Slash: return "'/'";
+        case TokenKind::Amp: return "'&'";
         case TokenKind::EqualEqual: return "'=='";
         case TokenKind::BangEqual: return "'!='";
         case TokenKind::Less: return "'<'";
@@ -169,6 +170,7 @@ std::vector<Token> Lexer::tokenize() {
                 break;
             case '+': advance(); tok(TokenKind::Plus, "+"); break;
             case '*': advance(); tok(TokenKind::Star, "*"); break;
+            case '&': advance(); tok(TokenKind::Amp, "&"); break;
             case '/': advance(); tok(TokenKind::Slash, "/"); break;
             case '!':
                 advance();

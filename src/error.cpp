@@ -22,6 +22,9 @@ const char* templateFor(Err code) {
         case Err::VariableRedeclared:     return "variable '{}' is already declared";
         case Err::UndeclaredIdentifier:   return "undeclared identifier '{}'{}";
         case Err::ImmutableAssign:        return "cannot assign to immutable variable '{}'";
+        case Err::AddressOfNonVariable:   return "'&' can only be applied to a variable";
+        case Err::DerefNonVariable:       return "'*' can only dereference a variable";
+        case Err::DerefNonPointer:        return "cannot dereference non-pointer '{}'";
 
         case Err::UndeclaredFunction:     return "call to undeclared function '{}'{}";
         case Err::ArgCountMismatch:       return "'{}' expects {} argument(s), got {}";

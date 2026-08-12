@@ -18,6 +18,7 @@ private:
     struct VarInfo {
         llvm::AllocaInst* value = nullptr;
         bool isMutable = false;
+        Type type;
     };
 
     struct LoopCtx {
@@ -41,6 +42,10 @@ private:
     llvm::Value* genWrite(const CallExpr& c);
     llvm::Value* genTerminalPause(const CallExpr& c);
     llvm::Value* genUserInput(const CallExpr& c);
+    llvm::Value* genAddressOf(const AddressOfExpr& e);
+    llvm::Value* genDeref(const DerefExpr& e);
+    llvm::Value* castToType(llvm::Value* v, llvm::Type* target, bool isSigned);
+    llvm::Type* llvmType(const Type& t);
     llvm::Type* mapType(const TypeRef& t);
     llvm::AllocaInst* createAlloca(llvm::Function* f, llvm::Type* ty, const std::string& name);
     llvm::Function* putsFn();

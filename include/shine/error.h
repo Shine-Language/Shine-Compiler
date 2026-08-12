@@ -25,6 +25,9 @@ enum class Err {
     VariableRedeclared,
     UndeclaredIdentifier,
     ImmutableAssign,
+    AddressOfNonVariable,
+    DerefNonVariable,
+    DerefNonPointer,
 
     // codegen: functions & calls
     UndeclaredFunction,
