@@ -29,7 +29,7 @@
 - [x] General improvements to error handling
 
 ## v0.6.0 - real types
-- [ ] Type hierarchy instead of string-named TypeRef
+- [x] Type hierarchy instead of string-named TypeRef
 - [ ] Pointers, fixed-width ints
 - [ ] Type-checking pass (codegen currently does no validation of its own)
 
