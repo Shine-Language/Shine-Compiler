@@ -111,23 +111,24 @@ static void setTriple(Mod& mod, const llvm::Triple& t, long) {
 }
 
 template <class Tgt>
-static auto makeTargetMachine(const Tgt& target, const llvm::Triple& t, const llvm::TargetOptions& opts, int)
-    -> decltype(target.createTargetMachine(t, "generic", "", opts, llvm::Reloc::PIC_)) {
-    return target.createTargetMachine(t, "generic", "", opts, llvm::Reloc::PIC_);
+static auto makeTargetMachine(const Tgt& target, const llvm::Triple& t, const llvm::TargetOptions& opts,
+                               llvm::Reloc::Model reloc, int)
+    -> decltype(target.createTargetMachine(t, "generic", "", opts, reloc)) {
+    return target.createTargetMachine(t, "generic", "", opts, reloc);
 }
 
 template <class Tgt>
 static llvm::TargetMachine* makeTargetMachine(const Tgt& target, const llvm::Triple& t,
-                                               const llvm::TargetOptions& opts, long) {
-    return target.createTargetMachine(t.getTriple(), "generic", "", opts, llvm::Reloc::PIC_);
+                                               const llvm::TargetOptions& opts, llvm::Reloc::Model reloc, long) {
+    return target.createTargetMachine(t.getTriple(), "generic", "", opts, reloc);
 }
 
-static void emitObj(llvm::Module& mod, const std::string& objPath) {
+static void emitObj(llvm::Module& mod, const std::string& objPath, bool target32) {
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmParser();
     llvm::InitializeNativeTargetAsmPrinter();
 
-    llvm::Triple triple(llvm::sys::getDefaultTargetTriple());
+    llvm::Triple triple(target32 ? "i686-elf" : llvm::sys::getDefaultTargetTriple());
     setTriple(mod, triple, 0);
 
     std::string lookupErr;
@@ -135,7 +136,8 @@ static void emitObj(llvm::Module& mod, const std::string& objPath) {
     if (!target) { std::cerr << "shinec: " << lookupErr << "\n"; std::exit(1); }
 
     llvm::TargetOptions opts;
-    std::unique_ptr<llvm::TargetMachine> tm(makeTargetMachine(*target, triple, opts, 0));
+    llvm::Reloc::Model reloc = target32 ? llvm::Reloc::Static : llvm::Reloc::PIC_;
+    std::unique_ptr<llvm::TargetMachine> tm(makeTargetMachine(*target, triple, opts, reloc, 0));
     mod.setDataLayout(tm->createDataLayout());
 
     std::error_code ec;
@@ -216,19 +218,22 @@ static void link(const std::string& objPath, const std::string& exePath) {
 }
 
 int main(int argc, char** argv) {
-    if (argc < 2) { std::cerr << "usage: shinec <input.shine> [-o <output>]\n"; return 1; }
+    if (argc < 2) { std::cerr << "usage: shinec <input.shine> [-o <output>] [-32]\n"; return 1; }
 
     std::string in, out;
+    bool target32 = false;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         if (a == "-o" && i + 1 < argc) out = argv[++i];
+        else if (a == "-32") target32 = true;
         else in = a;
     }
-    if (in.empty()) { std::cerr << "usage: shinec <input.shine> [-o <output>]\n"; return 1; }
+    if (in.empty()) { std::cerr << "usage: shinec <input.shine> [-o <output>] [-32]\n"; return 1; }
     if (out.empty()) {
         out = stripExt(in);
+        if (target32) out += ".o";
 #ifdef _WIN32
-        out += ".exe";
+        else out += ".exe";
 #endif
     }
 
@@ -242,8 +247,14 @@ int main(int argc, char** argv) {
         CodeGen cg;
         auto ir = cg.generate(mod);
 
+        if (target32) {
+            emitObj(*ir, out, true);
+            std::cout << "shinec: built '" << out << "' (32-bit freestanding ELF object, not linked)\n";
+            return 0;
+        }
+
         std::string objPath = stripExt(in) + ".o";
-        emitObj(*ir, objPath);
+        emitObj(*ir, objPath, false);
         link(objPath, out);
 
         std::cout << "shinec: built '" << out << "'\n";

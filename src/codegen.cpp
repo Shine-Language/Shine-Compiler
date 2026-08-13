@@ -210,9 +210,6 @@ void CodeGen::genContinue(const ContinueStmt& s) {
 
 llvm::Value* CodeGen::genExpr(const Expr& e) {
     if (auto* i = dynamic_cast<const IntLiteralExpr*>(&e)) {
-        // Literals that don't fit in 32 bits (e.g. i64 initializers) must be
-        // materialized at 64 bits — otherwise the value is truncated here,
-        // before any later widening cast ever sees the real magnitude.
         bool fits32 = i->value >= INT32_MIN && i->value <= INT32_MAX;
         llvm::Type* ty = fits32 ? llvm::Type::getInt32Ty(*ctx_) : llvm::Type::getInt64Ty(*ctx_);
         return llvm::ConstantInt::get(ty, (uint64_t)i->value, true);
