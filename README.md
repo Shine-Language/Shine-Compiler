@@ -82,9 +82,14 @@ After that your Shine code has been compiled and is ready to run!
 
 ## Building from Source (Windows, MSYS2/MinGW)
 
+Clone The Repository
 ```
-pacman -S mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake \
-          mingw-w64-x86_64-llvm mingw-w64-x86_64-ninja
+git clone https://github.com/Shine-Language/Shine-Compiler.git
+cd Shine-Compiler
+```
+
+Build It (May need tweaking if you are not using Windows)
+```
 cmake -B build -G Ninja
 cmake --build build
 ./build/tests/shine_tests.exe
