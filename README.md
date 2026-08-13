@@ -26,7 +26,7 @@ Standard Library: GPL-3.0 with runtime library exception
 This means programs written in Shine and linked against the stdlib 
 are NOT required to be GPL-licensed.
 
-See [STBLICENSE](STBDLICENSE)
+See [STBLIB-LICENSE](STBDLIB-LICENSE)
 
 ---
 
