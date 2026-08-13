@@ -12,13 +12,17 @@ struct Registrar { Registrar(const std::string& n, std::function<void()> f) { re
 struct Fail { std::string msg; };
 
 inline int runAll() {
+    const char* green = "\033[32m";
+    const char* red = "\033[31m";
+    const char* reset = "\033[0m";
     int failed = 0;
     for (auto& t : registry()) {
-        try { t.fn(); std::cout << "[PASS] " << t.name << "\n"; }
-        catch (const Fail& f) { std::cout << "[FAIL] " << t.name << ": " << f.msg << "\n"; failed++; }
-        catch (const std::exception& e) { std::cout << "[FAIL] " << t.name << ": " << e.what() << "\n"; failed++; }
+        try { t.fn(); std::cout << green << "[PASS] " << t.name << reset << "\n"; }
+        catch (const Fail& f) { std::cout << red << "[FAIL] " << t.name << ": " << f.msg << reset << "\n"; failed++; }
+        catch (const std::exception& e) { std::cout << red << "[FAIL] " << t.name << ": " << e.what() << reset << "\n"; failed++; }
     }
-    std::cout << (registry().size() - failed) << "/" << registry().size() << " passed\n";
+    const char* summaryColor = failed ? red : green;
+    std::cout << summaryColor << (registry().size() - failed) << "/" << registry().size() << " passed" << reset << "\n";
     return failed;
 }
 
