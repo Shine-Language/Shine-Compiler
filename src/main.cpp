@@ -218,20 +218,22 @@ static void link(const std::string& objPath, const std::string& exePath) {
 }
 
 int main(int argc, char** argv) {
-    if (argc < 2) { std::cerr << "usage: shinec <input.shine> [-o <output>] [-32]\n"; return 1; }
+    if (argc < 2) { std::cerr << "usage: shinec <input.shine> [-o <output>] [-32] [-c]\n"; return 1; }
 
     std::string in, out;
     bool target32 = false;
+    bool cOnly = false;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         if (a == "-o" && i + 1 < argc) out = argv[++i];
         else if (a == "-32") target32 = true;
+        else if (a == "-c") cOnly = true;
         else in = a;
     }
-    if (in.empty()) { std::cerr << "usage: shinec <input.shine> [-o <output>] [-32]\n"; return 1; }
+    if (in.empty()) { std::cerr << "usage: shinec <input.shine> [-o <output>] [-32] [-c]\n"; return 1; }
     if (out.empty()) {
         out = stripExt(in);
-        if (target32) out += ".o";
+        if (target32 || cOnly) out += ".o";
 #ifdef _WIN32
         else out += ".exe";
 #endif
@@ -250,6 +252,12 @@ int main(int argc, char** argv) {
         if (target32) {
             emitObj(*ir, out, true);
             std::cout << "shinec: built '" << out << "' (32-bit freestanding ELF object, not linked)\n";
+            return 0;
+        }
+
+        if (cOnly) {
+            emitObj(*ir, out, false);
+            std::cout << "shinec: built '" << out << "' (object only, not linked)\n";
             return 0;
         }
 
