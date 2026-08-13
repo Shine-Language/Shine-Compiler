@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
-DIST_DIR="$ROOT_DIR/dist/shine-v0.6.0-BETA"
+DIST_DIR="$ROOT_DIR/dist/shine-v0.7.0-BETA"
 TOOLCHAIN_DIR="$DIST_DIR/toolchain"
 TOOLCHAIN_BIN="$TOOLCHAIN_DIR/bin"
 TOOLCHAIN_LIB="$TOOLCHAIN_DIR/lib"
