@@ -33,14 +33,47 @@
 - [x] Pointers, fixed-width ints
 - [x] Type-checking pass (codegen currently does no validation of its own)
 
-## Later (Will be added in the future)
-- [ ] Structs, arrays
-- [ ] Standard library (move write out of the compiler)
-- [ ] Multi-file modules
-- [ ] C FFI (extern function declarations, calling into existing native libs).
+## v0.7.0 - build/driver improvements
+- [x] `-32` flag for 32-bit compilation
+- [x] `-c` flag (compile only, skip linking)
+- [x] Success/failure messages colored (green/red) in the driver output
+
+## v0.8.0 - structs
+- [ ] `struct Name { field: type, ... }` declarations
+- [ ] Field access (`x.field`) and field assignment (`x.field = expr;`)
+- [ ] Struct values as function params/returns
+- [ ] Struct literal / initialization syntax
+
+## v0.9.0 - arrays
+- [ ] Fixed-size arrays
+- [ ] Indexing (`arr[i]`), with a decided and documented bounds-check behavior
+- [ ] Array/pointer decay interaction
+- [ ] Simple slices (ptr + length) if time allows, otherwise deferred past v1.0.0
+
+## v0.10.0 - standard library
+- [ ] Minimal extern mechanism, just enough to call into libc (printf, scanf, malloc)
+- [ ] Move `write`/`user_input`/`terminal.pause` out of the compiler and into Shine-source stdlib functions
+- [ ] Basic `String`/`Buffer`-style type built on structs + arrays
+
+## v0.11.0 - error handling
+- [ ] Result/error-union style return values
+- [ ] Propagation syntax, or at minimum pattern-matching on Result
+
+## v0.12.0 - multi-file modules
+- [ ] `import`/module resolution
+- [ ] Symbol visibility (pub/private)
+- [ ] Multi-translation-unit linking in the driver
+
+## v1.0.0 - out of beta
+- [ ] Syntax freeze, written language spec/reference (not just README examples)
+- [ ] Full test coverage pass, basic parser/lexer fuzzing
+- [ ] Documented versioning/back-compat policy going forward
+- [ ] README status line updated to reflect 1.0, not active-development beta
+
+## Later (Will be added in the future, post-v1.0.0)
+- [ ] Full C FFI (extern function declarations, calling into arbitrary native libs)
 - [ ] `defer` statements for guaranteed cleanup
-- [ ] Error handling (error unions / Result-style)
-- [ ] Function pointers and callbacks (needed for the C FFI)
+- [ ] Function pointers and callbacks
 - [ ] Closures with explicit capture (allocator-controlled, no GC)
 - [ ] Allocator story in the stdlib (arena, pool, bump allocators)
 - [ ] Package manager + package ecosystem (Cargo/pip-style)
