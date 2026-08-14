@@ -1,0 +1,42 @@
+// v0.8.0 target syntax: structs. Not yet supported by the compiler --
+// this is the spec to build toward, in the same style as v0_6.shine.
+
+struct Vec2 {
+    x: i32,
+    y: i32,
+}
+
+struct Player {
+    pos: Vec2,
+    health: i32,
+    name: *i32, // placeholder until a real string/array type exists
+}
+
+fn Vec2 add(a: Vec2, b: Vec2) {
+    // Struct literal, built from field access on the params.
+    r/Vec2 { x: a.x + b.x, y: a.y + b.y };
+}
+
+fn void damage(p: *Player, amount: i32) {
+    // Field access/assignment through a pointer-to-struct.
+    (*p).health = (*p).health - amount;
+}
+
+fn i32 main() {
+    var(Vec2) origin = Vec2 { x: 0, y: 0 };
+    var(Vec2) delta  = Vec2 { x: 3, y: 4 };
+
+    var(Vec2) moved = add(origin, delta);
+    write(moved.x); // 3
+    write(moved.y); // 4
+
+    var(Player) hero = Player { pos: moved, health: 100, name: 0 };
+
+    var(*Player) pHero = &hero;
+    damage(pHero, 30);
+
+    write(hero.health);   // 70, mutated through the pointer
+    write(hero.pos.x);    // 3, nested field access
+
+    return/0;
+}

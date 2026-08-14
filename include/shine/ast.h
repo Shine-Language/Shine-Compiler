@@ -23,6 +23,11 @@ struct CallExpr : Expr { std::string callee; std::vector<ExprPtr> args; };
 struct BinaryExpr : Expr { std::string op; ExprPtr left; ExprPtr right; };
 struct AddressOfExpr : Expr { ExprPtr operand; };
 struct DerefExpr : Expr { ExprPtr operand; };
+struct FieldAccessExpr : Expr { ExprPtr target; std::string field; };
+struct StructLiteralExpr : Expr {
+    std::string structName;
+    std::vector<std::pair<std::string, ExprPtr>> fields;
+};
 
 struct Stmt { virtual ~Stmt() = default; SourceLoc loc; };
 using StmtPtr = std::unique_ptr<Stmt>;
@@ -37,6 +42,8 @@ struct VarDeclStmt : Stmt {
 };
 struct AssignStmt : Stmt { std::string name; ExprPtr value; };
 struct DerefAssignStmt : Stmt { ExprPtr target; ExprPtr value; };
+// `target.field = value;` -- target is the struct-valued expression being written through.
+struct FieldAssignStmt : Stmt { ExprPtr target; std::string field; ExprPtr value; };
 struct IfStmt : Stmt {
     ExprPtr cond;
     std::vector<StmtPtr> thenBody;
@@ -47,6 +54,13 @@ struct BreakStmt : Stmt {};
 struct ContinueStmt : Stmt {};
 
 struct Param { std::string name; TypeRef type; };
+
+struct StructField { std::string name; TypeRef type; };
+struct StructDecl {
+    std::string name;
+    std::vector<StructField> fields;
+    SourceLoc loc;
+};
 
 struct FunctionDecl {
     std::string name;
@@ -59,6 +73,7 @@ struct FunctionDecl {
 struct Module {
     std::string file;
     std::vector<FunctionDecl> functions;
+    std::vector<StructDecl> structs;
 };
 
 }

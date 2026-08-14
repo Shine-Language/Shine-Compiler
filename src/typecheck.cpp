@@ -20,10 +20,27 @@ void TypeChecker::expectType(const Type& got, const Type& want, const SourceLoc&
         throw CompileError(loc, Err::TypeMismatch, {want.canonicalName(), got.canonicalName()});
 }
 
+const StructDecl& TypeChecker::findStruct(const std::string& name, const SourceLoc& loc) {
+    auto it = structs_.find(name);
+    if (it == structs_.end()) throw CompileError(loc, Err::UnknownStruct, {name});
+    return *it->second;
+}
+
+const StructField& TypeChecker::findField(const StructDecl& sd, const std::string& fieldName, const SourceLoc& loc) {
+    for (auto& f : sd.fields)
+        if (f.name == fieldName) return f;
+    throw CompileError(loc, Err::UnknownField, {sd.name, fieldName});
+}
+
 void TypeChecker::checkAssignable(const Expr& src, const Type& want, const SourceLoc& loc) {
     Type got = inferExpr(src);
     if (got.equals(want)) return;
     if (want.isInt() && got.isInt() && dynamic_cast<const IntLiteralExpr*>(&src)) return;
+    // `0` is also accepted as a null pointer constant, same as C.
+    if (want.isPointer() && got.isInt()) {
+        if (auto* lit = dynamic_cast<const IntLiteralExpr*>(&src))
+            if (lit->value == 0) return;
+    }
     throw CompileError(loc, Err::TypeMismatch, {want.canonicalName(), got.canonicalName()});
 }
 
@@ -98,6 +115,21 @@ Type TypeChecker::inferExpr(const Expr& e) {
         if (!t.isPointer()) throw CompileError(de->loc, Err::DerefNonPointer, {t.canonicalName()});
         return *t.pointee;
     }
+    if (auto* fa = dynamic_cast<const FieldAccessExpr*>(&e)) {
+        Type t = inferExpr(*fa->target);
+        if (!t.isStruct()) throw CompileError(fa->loc, Err::FieldAccessNonStruct, {fa->field, t.canonicalName()});
+        return findField(findStruct(t.structName, fa->loc), fa->field, fa->loc).type.type;
+    }
+    if (auto* sl = dynamic_cast<const StructLiteralExpr*>(&e)) {
+        const StructDecl& sd = findStruct(sl->structName, sl->loc);
+        if (sl->fields.size() != sd.fields.size())
+            throw CompileError(sl->loc, Err::StructLiteralMismatch, {sd.name});
+        for (auto& [fname, fexpr] : sl->fields) {
+            const StructField& field = findField(sd, fname, sl->loc);
+            checkAssignable(*fexpr, field.type.type, fexpr->loc);
+        }
+        return Type::makeStruct(sd.name);
+    }
     throw CompileError(e.loc, Err::UnhandledExpression);
 }
 
@@ -113,6 +145,7 @@ void TypeChecker::checkStmt(const Stmt& s) {
         if (vars_.find(v->name) != vars_.end())
             throw CompileError(v->loc, Err::VariableRedeclared, {v->name});
         if (v->type.type.isVoid()) throw CompileError(v->type.loc, Err::VoidVariable);
+        if (v->type.type.isStruct()) findStruct(v->type.type.structName, v->type.loc);
         checkAssignable(*v->value, v->type.type, v->value->loc);
         vars_[v->name] = {v->type.type, v->isMutable};
         return;
@@ -129,6 +162,13 @@ void TypeChecker::checkStmt(const Stmt& s) {
         Type ptrTy = inferExpr(*da->target);
         if (!ptrTy.isPointer()) throw CompileError(da->loc, Err::DerefNonPointer, {ptrTy.canonicalName()});
         checkAssignable(*da->value, *ptrTy.pointee, da->value->loc);
+        return;
+    }
+    if (auto* fa = dynamic_cast<const FieldAssignStmt*>(&s)) {
+        Type t = inferExpr(*fa->target);
+        if (!t.isStruct()) throw CompileError(fa->loc, Err::FieldAccessNonStruct, {fa->field, t.canonicalName()});
+        const StructField& field = findField(findStruct(t.structName, fa->loc), fa->field, fa->loc);
+        checkAssignable(*fa->value, field.type.type, fa->value->loc);
         return;
     }
     if (auto* e = dynamic_cast<const ExprStmt*>(&s)) { inferExpr(*e->expr); return; }
@@ -165,11 +205,19 @@ void TypeChecker::checkLoop(const LoopStmt& s) {
 void TypeChecker::checkFn(const FunctionDecl& fn) {
     currentFn_ = &fn;
     vars_.clear();
-    for (auto& p : fn.params) vars_[p.name] = {p.type.type, false};
+    if (fn.returnType.type.isStruct()) findStruct(fn.returnType.type.structName, fn.returnType.loc);
+    for (auto& p : fn.params) {
+        if (p.type.type.isStruct()) findStruct(p.type.type.structName, p.type.loc);
+        vars_[p.name] = {p.type.type, false};
+    }
     checkStmtList(fn.body);
 }
 
 void TypeChecker::check(const Module& mod) {
+    for (auto& sd : mod.structs) structs_[sd.name] = &sd;
+    for (auto& sd : mod.structs)
+        for (auto& f : sd.fields)
+            if (f.type.type.isStruct()) findStruct(f.type.type.structName, f.type.loc);
     for (auto& fn : mod.functions) fns_[fn.name] = &fn;
     for (auto& fn : mod.functions) checkFn(fn);
 }

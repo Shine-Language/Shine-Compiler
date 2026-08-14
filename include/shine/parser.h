@@ -20,13 +20,12 @@ private:
     bool atEnd() const;
 
     FunctionDecl function();
+    StructDecl structDecl();
     Param param();
     TypeRef type();
     StmtPtr stmt();
     StmtPtr returnStmt();
     StmtPtr varDecl();
-    StmtPtr assignStmt();
-    StmtPtr derefAssignStmt();
     StmtPtr ifStmt();
     StmtPtr loopStmt();
     StmtPtr breakStmt();
@@ -38,7 +37,9 @@ private:
     ExprPtr term();
     ExprPtr factor();
     ExprPtr unary();
+    ExprPtr postfix();
     ExprPtr primary();
+    ExprPtr structLiteral(const Token& name);
 
     [[noreturn]] void err(const Token& t, const std::string& msg) const;
     [[noreturn]] void err(const Token& t, Err code, const std::vector<std::string>& args = {}) const;

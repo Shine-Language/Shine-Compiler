@@ -28,6 +28,10 @@ const char* templateFor(Err code) {
         case Err::TypeMismatch:           return "expected type '{}', got '{}'";
         case Err::ReturnTypeMismatch:     return "function '{}' expects return type '{}', got '{}'";
         case Err::VoidExpression:         return "expression cannot have type void";
+        case Err::UnknownStruct:          return "unknown struct type '{}'";
+        case Err::UnknownField:           return "struct '{}' has no field '{}'";
+        case Err::FieldAccessNonStruct:   return "cannot access field '{}' on non-struct type '{}'";
+        case Err::StructLiteralMismatch:  return "struct literal for '{}' does not match its fields";
 
         case Err::UndeclaredFunction:     return "call to undeclared function '{}'{}";
         case Err::ArgCountMismatch:       return "'{}' expects {} argument(s), got {}";

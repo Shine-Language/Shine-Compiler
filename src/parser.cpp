@@ -44,9 +44,30 @@ void Parser::err(const Token& t, Err code, const std::vector<std::string>& args)
 }
 
 Module Parser::parseModule(std::string file) {
-    Module m{std::move(file), {}};
-    while (!atEnd()) m.functions.push_back(function());
+    Module m;
+    m.file = std::move(file);
+    while (!atEnd()) {
+        if (check(TokenKind::KwStruct)) m.structs.push_back(structDecl());
+        else m.functions.push_back(function());
+    }
     return m;
+}
+
+StructDecl Parser::structDecl() {
+    const Token& kw = advance(); // 'struct'
+    const Token& name = expect(TokenKind::Identifier, "as struct name");
+    StructDecl d;
+    d.name = name.text;
+    d.loc = kw.loc;
+    expect(TokenKind::LBrace, "to start struct body");
+    while (!check(TokenKind::RBrace)) {
+        const Token& fname = expect(TokenKind::Identifier, "as field name");
+        expect(TokenKind::Colon, "after field name");
+        d.fields.push_back({fname.text, type()});
+        if (!match(TokenKind::Comma)) break; // trailing comma is optional
+    }
+    expect(TokenKind::RBrace, "to close struct body");
+    return d;
 }
 
 TypeRef Parser::type() {
@@ -62,8 +83,6 @@ TypeRef Parser::type() {
         name = t.kind == TokenKind::KwInt ? "int" : "void";
         loc = t.loc;
     } else if (check(TokenKind::Identifier)) {
-        Type probe;
-        if (!resolveTypeName(peek().text, probe)) err(peek(), Err::ExpectedType);
         const Token& t = advance();
         name = t.text;
         loc = t.loc;
@@ -72,7 +91,11 @@ TypeRef Parser::type() {
     }
 
     TypeRef ref{name, {}, loc};
-    resolveTypeName(name, ref.type);
+    if (!resolveTypeName(name, ref.type)) {
+        // Not a built-in spelling -- treat it as a reference to a struct
+        // type by name; the type-checker resolves whether it actually exists.
+        ref.type = Type::makeStruct(name);
+    }
     for (int i = 0; i < prefixStars; ++i) {
         ref.type = Type::makePointer(ref.type);
         ref.name = "*" + ref.name;
@@ -119,12 +142,42 @@ StmtPtr Parser::stmt() {
     if (check(TokenKind::KwLoop)) return loopStmt();
     if (check(TokenKind::KwStop)) return breakStmt();
     if (check(TokenKind::KwCont)) return contStmt();
-    if (check(TokenKind::Identifier) && peek(1).kind == TokenKind::Equal) return assignStmt();
-    if (check(TokenKind::Star) && peek(1).kind == TokenKind::Identifier && peek(2).kind == TokenKind::Equal)
-        return derefAssignStmt();
+
+    SourceLoc loc = peek().loc;
+    ExprPtr e = expr();
+
+    if (match(TokenKind::Equal)) {
+        ExprPtr value = expr();
+        expect(TokenKind::Semicolon, "after assignment");
+
+        if (auto* id = dynamic_cast<IdentifierExpr*>(e.get())) {
+            auto s = std::make_unique<AssignStmt>();
+            s->loc = loc;
+            s->name = id->name;
+            s->value = std::move(value);
+            return s;
+        }
+        if (auto* de = dynamic_cast<DerefExpr*>(e.get())) {
+            auto s = std::make_unique<DerefAssignStmt>();
+            s->loc = loc;
+            s->target = std::move(de->operand);
+            s->value = std::move(value);
+            return s;
+        }
+        if (auto* fa = dynamic_cast<FieldAccessExpr*>(e.get())) {
+            auto s = std::make_unique<FieldAssignStmt>();
+            s->loc = loc;
+            s->target = std::move(fa->target);
+            s->field = fa->field;
+            s->value = std::move(value);
+            return s;
+        }
+        err(peek(-1), Err::ExpectedExpression);
+    }
+
     auto s = std::make_unique<ExprStmt>();
-    s->loc = peek().loc;
-    s->expr = expr();
+    s->loc = loc;
+    s->expr = std::move(e);
     expect(TokenKind::Semicolon, "after expression");
     return s;
 }
@@ -201,32 +254,6 @@ StmtPtr Parser::varDecl() {
     return s;
 }
 
-StmtPtr Parser::assignStmt() {
-    const Token& name = advance();
-    auto s = std::make_unique<AssignStmt>();
-    s->loc = name.loc;
-    s->name = name.text;
-    expect(TokenKind::Equal, "after variable name");
-    s->value = expr();
-    expect(TokenKind::Semicolon, "after assignment");
-    return s;
-}
-
-StmtPtr Parser::derefAssignStmt() {
-    const Token& star = advance();
-    auto s = std::make_unique<DerefAssignStmt>();
-    s->loc = star.loc;
-    const Token& name = expect(TokenKind::Identifier, "as pointer name");
-    auto target = std::make_unique<IdentifierExpr>();
-    target->loc = name.loc;
-    target->name = name.text;
-    s->target = std::move(target);
-    expect(TokenKind::Equal, "after dereferenced pointer");
-    s->value = expr();
-    expect(TokenKind::Semicolon, "after assignment");
-    return s;
-}
-
 StmtPtr Parser::returnStmt() {
     const Token& kw = advance();
     auto s = std::make_unique<ReturnStmt>();
@@ -299,7 +326,21 @@ ExprPtr Parser::unary() {
         e->operand = unary();
         return e;
     }
-    return primary();
+    return postfix();
+}
+
+ExprPtr Parser::postfix() {
+    ExprPtr e = primary();
+    while (check(TokenKind::Dot)) {
+        advance();
+        const Token& field = expect(TokenKind::Identifier, "after '.'");
+        auto fa = std::make_unique<FieldAccessExpr>();
+        fa->loc = field.loc;
+        fa->target = std::move(e);
+        fa->field = field.text;
+        e = std::move(fa);
+    }
+    return e;
 }
 
 ExprPtr Parser::primary() {
@@ -324,13 +365,20 @@ ExprPtr Parser::primary() {
     }
     if (check(TokenKind::Identifier)) {
         const Token& name = advance();
+
+        // Struct literal: Name { field: expr, ... }
+        if (check(TokenKind::LBrace)) return structLiteral(name);
+
         std::string callee = name.text;
-        while (check(TokenKind::Dot)) {
+        // The only namespaced builtin is terminal.pause(); ordinary dotted
+        // access (struct.field, chains, etc.) is handled by postfix().
+        if (callee == "terminal" && check(TokenKind::Dot) &&
+            peek(1).kind == TokenKind::Identifier && peek(1).text == "pause") {
             advance();
-            callee += "." + expect(TokenKind::Identifier, "after '.'").text;
+            callee += "." + advance().text;
         }
+
         if (!check(TokenKind::LParen)) {
-            if (callee != name.text) err(name, Err::ExpectedToken, {"'('", "after '" + callee + "'", tokenName(peek().kind)});
             auto e = std::make_unique<IdentifierExpr>();
             e->loc = name.loc;
             e->name = callee;
@@ -348,6 +396,21 @@ ExprPtr Parser::primary() {
         return call;
     }
     err(peek(), Err::ExpectedExpression);
+}
+
+ExprPtr Parser::structLiteral(const Token& name) {
+    auto lit = std::make_unique<StructLiteralExpr>();
+    lit->loc = name.loc;
+    lit->structName = name.text;
+    expect(TokenKind::LBrace, "to start struct literal");
+    while (!check(TokenKind::RBrace)) {
+        const Token& fname = expect(TokenKind::Identifier, "as field name");
+        expect(TokenKind::Colon, "after field name");
+        lit->fields.emplace_back(fname.text, expr());
+        if (!match(TokenKind::Comma)) break; // trailing comma is optional
+    }
+    expect(TokenKind::RBrace, "to close struct literal");
+    return lit;
 }
 
 }

@@ -31,6 +31,10 @@ enum class Err {
     TypeMismatch,
     ReturnTypeMismatch,
     VoidExpression,
+    UnknownStruct,
+    UnknownField,
+    FieldAccessNonStruct,
+    StructLiteralMismatch,
 
     // codegen: functions & calls
     UndeclaredFunction,

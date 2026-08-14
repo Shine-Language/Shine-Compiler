@@ -39,10 +39,11 @@
 - [x] Success/failure messages colored (green/red) in the driver output
 
 ## v0.8.0 - structs
-- [ ] `struct Name { field: type, ... }` declarations
-- [ ] Field access (`x.field`) and field assignment (`x.field = expr;`)
-- [ ] Struct values as function params/returns
-- [ ] Struct literal / initialization syntax
+- [x] `struct Name { field: type, ... }` declarations
+- [x] Field access (`x.field`) and field assignment (`x.field = expr;`)
+- [x] Struct values as function params/returns
+- [x] Struct literal / initialization syntax
+- [x] return/0; is also valid like r/0;
 
 ## v0.9.0 - arrays
 - [ ] Fixed-size arrays

@@ -49,6 +49,14 @@ private:
     // itself yields a pointer, e.g. the `ppx` in `**ppx`) down to the
     // concrete address it points to plus that address's pointee type.
     PtrInfo genPointerExpr(const Expr& e);
+    struct AddrInfo { llvm::Value* ptr; Type type; };
+    // Resolves any lvalue-shaped expression (identifier, `*p`, or a chain of
+    // `.field` accesses over either of those) down to the concrete storage
+    // address holding that value, plus its type. Used for both field reads
+    // and field writes so both share one struct-layout lookup.
+    AddrInfo genLValueAddr(const Expr& e);
+    llvm::Value* genFieldAccess(const FieldAccessExpr& e);
+    llvm::Value* genStructLiteral(const StructLiteralExpr& e);
     llvm::Value* castToType(llvm::Value* v, llvm::Type* target, bool isSigned);
     llvm::Type* llvmType(const Type& t);
     llvm::Type* mapType(const TypeRef& t);
@@ -65,6 +73,8 @@ private:
     std::unique_ptr<llvm::IRBuilder<>> b_;
     std::unordered_map<std::string, llvm::Function*> fns_;
     std::unordered_map<std::string, VarInfo> vars_;
+    std::unordered_map<std::string, const StructDecl*> structs_;
+    std::unordered_map<std::string, llvm::StructType*> structTys_;
     std::vector<LoopCtx> loopStack_;
     llvm::Function* puts_ = nullptr;
     llvm::Function* getchar_ = nullptr;

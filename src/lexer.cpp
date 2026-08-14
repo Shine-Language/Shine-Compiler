@@ -8,7 +8,7 @@ namespace shine {
 static const std::unordered_map<std::string, TokenKind> kKeywords = {
     {"fn", TokenKind::KwFn},
     {"let", TokenKind::KwLet}, {"var", TokenKind::KwVar},
-    {"int", TokenKind::KwInt}, {"void", TokenKind::KwVoid},
+    {"int", TokenKind::KwInt}, {"void", TokenKind::KwVoid}, {"struct", TokenKind::KwStruct},
     {"if", TokenKind::KwIf}, {"else", TokenKind::KwElse},
     {"loop", TokenKind::KwLoop}, {"stop", TokenKind::KwStop}, {"cont", TokenKind::KwCont},
 };
@@ -24,6 +24,7 @@ const char* tokenName(TokenKind k) {
         case TokenKind::KwVar: return "'var'";
         case TokenKind::KwInt: return "'int'";
         case TokenKind::KwVoid: return "'void'";
+        case TokenKind::KwStruct: return "'struct'";
         case TokenKind::KwIf: return "'if'";
         case TokenKind::KwElse: return "'else'";
         case TokenKind::KwLoop: return "'loop'";
@@ -105,9 +106,9 @@ Token Lexer::ident() {
     std::string s;
     while (!atEnd() && (std::isalnum((unsigned char)peek()) || peek() == '_')) s += advance();
 
-    if (s == "r" && peek() == '/' && peek(1) != '/' && peek(1) != '*') {
+    if ((s == "r" || s == "return") && peek() == '/' && peek(1) != '/' && peek(1) != '*') {
         advance();
-        return {TokenKind::KwReturn, "r/", 0, {file_, l, c}};
+        return {TokenKind::KwReturn, s + "/", 0, {file_, l, c}};
     }
 
     auto it = kKeywords.find(s);
