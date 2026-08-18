@@ -36,6 +36,10 @@ private:
     void genContinue(const ContinueStmt& s);
     llvm::Value* toBool(llvm::Value* v);
     llvm::Value* genExpr(const Expr& e);
+    // Evaluates an expression with a known target type. Array literals need
+    // this: their element type (and so the concrete LLVM array type) can only
+    // be known from context, e.g. `[1, 2, 3]` against a [3]i64 variable.
+    llvm::Value* genExprAs(const Expr& e, const Type& want);
     llvm::Value* genIdentifier(const IdentifierExpr& i);
     llvm::Value* genBinary(const BinaryExpr& e);
     llvm::Value* genCall(const CallExpr& c);
@@ -50,13 +54,15 @@ private:
     // concrete address it points to plus that address's pointee type.
     PtrInfo genPointerExpr(const Expr& e);
     struct AddrInfo { llvm::Value* ptr; Type type; };
-    // Resolves any lvalue-shaped expression (identifier, `*p`, or a chain of
-    // `.field` accesses over either of those) down to the concrete storage
-    // address holding that value, plus its type. Used for both field reads
-    // and field writes so both share one struct-layout lookup.
+    // Resolves any lvalue-shaped expression (identifier, `*p`, `a[i]`, or a
+    // chain of `.field` accesses over those) down to the concrete storage
+    // address holding that value, plus its type. Used for both reads and
+    // writes so they share one layout lookup.
     AddrInfo genLValueAddr(const Expr& e);
     llvm::Value* genFieldAccess(const FieldAccessExpr& e);
     llvm::Value* genStructLiteral(const StructLiteralExpr& e);
+    llvm::Value* genIndex(const IndexExpr& e);
+    llvm::Value* genArrayLiteral(const ArrayLiteralExpr& e, const Type& elemType);
     llvm::Value* castToType(llvm::Value* v, llvm::Type* target, bool isSigned);
     llvm::Type* llvmType(const Type& t);
     llvm::Type* mapType(const TypeRef& t);
@@ -72,10 +78,12 @@ private:
     std::unique_ptr<llvm::Module> mod_;
     std::unique_ptr<llvm::IRBuilder<>> b_;
     std::unordered_map<std::string, llvm::Function*> fns_;
+    std::unordered_map<std::string, const FunctionDecl*> fnDecls_;
     std::unordered_map<std::string, VarInfo> vars_;
     std::unordered_map<std::string, const StructDecl*> structs_;
     std::unordered_map<std::string, llvm::StructType*> structTys_;
     std::vector<LoopCtx> loopStack_;
+    const FunctionDecl* currentFnDecl_ = nullptr;
     llvm::Function* puts_ = nullptr;
     llvm::Function* getchar_ = nullptr;
     llvm::Function* printf_ = nullptr;

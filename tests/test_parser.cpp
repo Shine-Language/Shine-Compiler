@@ -120,3 +120,66 @@ TEST(loop_with_break_and_continue) {
     ASSERT_TRUE(dynamic_cast<BreakStmt*>(l->body[0].get()) != nullptr);
     ASSERT_TRUE(dynamic_cast<ContinueStmt*>(l->body[1].get()) != nullptr);
 }
+
+TEST(array_type_and_literal_decl) {
+    Module m = parse("fn int main() { var([5]i32) a = [1, 2, 3, 4, 5]; r/a[0]; }");
+    auto* v = dynamic_cast<VarDeclStmt*>(m.functions[0].body[0].get());
+    ASSERT_TRUE(v != nullptr);
+    ASSERT_TRUE(v->type.type.isArray());
+    ASSERT_EQ(v->type.type.length, 5);
+    ASSERT_TRUE(v->type.type.element->isInt());
+    auto* al = dynamic_cast<ArrayLiteralExpr*>(v->value.get());
+    ASSERT_TRUE(al != nullptr);
+    ASSERT_EQ(al->elements.size(), 5u);
+}
+
+TEST(array_type_nested) {
+    Module m = parse("fn int main() { var([2][3]i32) g = [[1, 2, 3], [4, 5, 6]]; r/0; }");
+    auto* v = dynamic_cast<VarDeclStmt*>(m.functions[0].body[0].get());
+    ASSERT_TRUE(v != nullptr);
+    ASSERT_TRUE(v->type.type.isArray());
+    ASSERT_EQ(v->type.type.length, 2);
+    ASSERT_TRUE(v->type.type.element->isArray());
+    ASSERT_EQ(v->type.type.element->length, 3);
+}
+
+TEST(index_expression) {
+    Module m = parse("fn int main() { var([3]i32) a = [1, 2, 3]; r/a[i + 1]; }");
+    auto* r = dynamic_cast<ReturnStmt*>(m.functions[0].body[1].get());
+    auto* ix = dynamic_cast<IndexExpr*>(r->value.get());
+    ASSERT_TRUE(ix != nullptr);
+    auto* bin = dynamic_cast<BinaryExpr*>(ix->index.get());
+    ASSERT_TRUE(bin != nullptr);
+    ASSERT_EQ(bin->op, "+");
+}
+
+TEST(index_assignment_statement) {
+    Module m = parse("fn int main() { var([3]i32) a = [1, 2, 3]; a[1] = 42; r/0; }");
+    auto* ia = dynamic_cast<IndexAssignStmt*>(m.functions[0].body[1].get());
+    ASSERT_TRUE(ia != nullptr);
+    ASSERT_TRUE(dynamic_cast<IdentifierExpr*>(ia->target.get()) != nullptr);
+    ASSERT_TRUE(dynamic_cast<IntLiteralExpr*>(ia->index.get()) != nullptr);
+    ASSERT_TRUE(dynamic_cast<IntLiteralExpr*>(ia->value.get()) != nullptr);
+}
+
+TEST(array_pointer_type_spellings) {
+    Module m = parse("fn void f(a: *[5]i32, b: [5]*i32) { }");
+    ASSERT_TRUE(m.functions[0].params[0].type.type.isPointer());
+    ASSERT_TRUE(m.functions[0].params[0].type.type.pointee->isArray());
+    ASSERT_TRUE(m.functions[0].params[1].type.type.isArray());
+    ASSERT_TRUE(m.functions[0].params[1].type.type.element->isPointer());
+}
+
+TEST(zero_length_array_rejected) {
+    bool threw = false;
+    try { parse("fn int main() { var([0]i32) a = [1]; r/0; }"); }
+    catch (const CompileError&) { threw = true; }
+    ASSERT_TRUE(threw);
+}
+
+TEST(non_int_array_length_rejected) {
+    bool threw = false;
+    try { parse("fn int main() { var([x]i32) a = [1]; r/0; }"); }
+    catch (const CompileError&) { threw = true; }
+    ASSERT_TRUE(threw);
+}

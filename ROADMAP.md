@@ -46,8 +46,10 @@
 - [x] return/0; is also valid like r/0;
 
 ## v0.9.0 - arrays
-- [ ] Fixed-size arrays
-- [ ] Indexing (`arr[i]`), with a decided and documented bounds-check behavior
+- [x] Fixed-size arrays
+    - `[N]type` syntax, array literals `[1, 2, 3]`, arrays as by-value params/returns/struct fields
+- [x] Indexing (`arr[i]`), with a decided and documented bounds-check behavior
+    - Constant indices are bounds-checked at compile time; runtime bounds-checking of non-constant indices is still TBD
 - [ ] Array/pointer decay interaction
 - [ ] Simple slices (ptr + length) if time allows, otherwise deferred past v1.0.0
 

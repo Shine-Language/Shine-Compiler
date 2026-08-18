@@ -71,13 +71,25 @@ StructDecl Parser::structDecl() {
 }
 
 TypeRef Parser::type() {
+    // Prefix modifiers, read right-to-left: '*' means pointer and '[N]'
+    // means fixed-size array, so *[5]i32 is "pointer to [5]i32" and
+    // [5]*i32 is "[5] pointers to i32".
+    struct Mod { enum { Star, Array } kind; int64_t length; };
+    std::vector<Mod> mods;
+    while (check(TokenKind::Star) || check(TokenKind::LBracket)) {
+        if (match(TokenKind::Star)) {
+            mods.push_back({Mod::Star, 0});
+        } else {
+            advance(); // consume '['
+            const Token& n = expect(TokenKind::IntLiteral, "as array length");
+            if (n.intValue < 1) err(n, Err::ArrayLengthZero, {std::to_string(n.intValue)});
+            expect(TokenKind::RBracket, "to close array length");
+            mods.push_back({Mod::Array, n.intValue});
+        }
+    }
+
     std::string name;
     SourceLoc loc;
-    int prefixStars = 0;
-    while (check(TokenKind::Star)) {
-        prefixStars++;
-        loc = advance().loc;
-    }
     if (check(TokenKind::KwInt) || check(TokenKind::KwVoid)) {
         const Token& t = advance();
         name = t.kind == TokenKind::KwInt ? "int" : "void";
@@ -96,9 +108,14 @@ TypeRef Parser::type() {
         // type by name; the type-checker resolves whether it actually exists.
         ref.type = Type::makeStruct(name);
     }
-    for (int i = 0; i < prefixStars; ++i) {
-        ref.type = Type::makePointer(ref.type);
-        ref.name = "*" + ref.name;
+    for (auto it = mods.rbegin(); it != mods.rend(); ++it) {
+        if (it->kind == Mod::Star) {
+            ref.type = Type::makePointer(ref.type);
+            ref.name = "*" + ref.name;
+        } else {
+            ref.type = Type::makeArray(ref.type, it->length);
+            ref.name = "[" + std::to_string(it->length) + "]" + ref.name;
+        }
     }
     while (match(TokenKind::Star)) {
         ref.type = Type::makePointer(ref.type);
@@ -169,6 +186,14 @@ StmtPtr Parser::stmt() {
             s->loc = loc;
             s->target = std::move(fa->target);
             s->field = fa->field;
+            s->value = std::move(value);
+            return s;
+        }
+        if (auto* ix = dynamic_cast<IndexExpr*>(e.get())) {
+            auto s = std::make_unique<IndexAssignStmt>();
+            s->loc = loc;
+            s->target = std::move(ix->target);
+            s->index = std::move(ix->index);
             s->value = std::move(value);
             return s;
         }
@@ -331,14 +356,26 @@ ExprPtr Parser::unary() {
 
 ExprPtr Parser::postfix() {
     ExprPtr e = primary();
-    while (check(TokenKind::Dot)) {
-        advance();
-        const Token& field = expect(TokenKind::Identifier, "after '.'");
-        auto fa = std::make_unique<FieldAccessExpr>();
-        fa->loc = field.loc;
-        fa->target = std::move(e);
-        fa->field = field.text;
-        e = std::move(fa);
+    for (;;) {
+        if (check(TokenKind::Dot)) {
+            advance();
+            const Token& field = expect(TokenKind::Identifier, "after '.'");
+            auto fa = std::make_unique<FieldAccessExpr>();
+            fa->loc = field.loc;
+            fa->target = std::move(e);
+            fa->field = field.text;
+            e = std::move(fa);
+        } else if (check(TokenKind::LBracket)) {
+            const Token& lb = advance();
+            auto ix = std::make_unique<IndexExpr>();
+            ix->loc = lb.loc;
+            ix->target = std::move(e);
+            ix->index = expr();
+            expect(TokenKind::RBracket, "to close index");
+            e = std::move(ix);
+        } else {
+            break;
+        }
     }
     return e;
 }
@@ -349,6 +386,7 @@ ExprPtr Parser::primary() {
         expect(TokenKind::RParen, "to close grouped expression");
         return e;
     }
+    if (check(TokenKind::LBracket)) return arrayLiteral();
     if (check(TokenKind::IntLiteral)) {
         const Token& t = advance();
         auto e = std::make_unique<IntLiteralExpr>();
@@ -410,6 +448,18 @@ ExprPtr Parser::structLiteral(const Token& name) {
         if (!match(TokenKind::Comma)) break; // trailing comma is optional
     }
     expect(TokenKind::RBrace, "to close struct literal");
+    return lit;
+}
+
+ExprPtr Parser::arrayLiteral() {
+    const Token& lb = advance();
+    auto lit = std::make_unique<ArrayLiteralExpr>();
+    lit->loc = lb.loc;
+    if (!check(TokenKind::RBracket)) {
+        lit->elements.push_back(expr());
+        while (match(TokenKind::Comma)) lit->elements.push_back(expr());
+    }
+    expect(TokenKind::RBracket, "to close array literal");
     return lit;
 }
 

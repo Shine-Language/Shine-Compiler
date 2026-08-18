@@ -11,6 +11,7 @@ enum class TypeKind {
     Int,
     Pointer,
     Struct,
+    Array,
 };
 
 struct Type {
@@ -19,17 +20,21 @@ struct Type {
     bool isSigned = true; // meaningful for Int
     std::shared_ptr<Type> pointee; // meaningful for Pointer
     std::string structName; // meaningful for Struct
+    std::shared_ptr<Type> element; // meaningful for Array
+    int64_t length = 0;   // meaningful for Array
 
     bool isVoid() const { return kind == TypeKind::Void; }
     bool isInt() const { return kind == TypeKind::Int; }
     bool isPointer() const { return kind == TypeKind::Pointer; }
     bool isStruct() const { return kind == TypeKind::Struct; }
+    bool isArray() const { return kind == TypeKind::Array; }
 
     bool equals(const Type& other) const {
         if (kind != other.kind) return false;
         if (kind == TypeKind::Int) return bitWidth == other.bitWidth && isSigned == other.isSigned;
         if (kind == TypeKind::Pointer) return pointee && other.pointee && pointee->equals(*other.pointee);
         if (kind == TypeKind::Struct) return structName == other.structName;
+        if (kind == TypeKind::Array) return length == other.length && element && other.element && element->equals(*other.element);
         return true;
     }
 
@@ -40,6 +45,7 @@ struct Type {
             case TypeKind::Int:     return (isSigned ? "i" : "u") + std::to_string(bitWidth);
             case TypeKind::Pointer: return (pointee ? pointee->canonicalName() : "?") + "*";
             case TypeKind::Struct:  return structName;
+            case TypeKind::Array:   return "[" + std::to_string(length) + "]" + (element ? element->canonicalName() : "?");
         }
         return "?";
     }
@@ -56,6 +62,13 @@ struct Type {
         Type t;
         t.kind = TypeKind::Struct;
         t.structName = std::move(name);
+        return t;
+    }
+    static Type makeArray(Type element, int64_t length) {
+        Type t;
+        t.kind = TypeKind::Array;
+        t.element = std::make_shared<Type>(std::move(element));
+        t.length = length;
         return t;
     }
 };

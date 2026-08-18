@@ -16,6 +16,7 @@ const char* templateFor(Err code) {
         case Err::ExpectedType:           return "expected a type";
         case Err::ExpectedExpression:     return "expected an expression";
         case Err::UnexpectedEof:          return "unexpected end of file in {}";
+        case Err::ArrayLengthZero:        return "array length must be at least 1, got {}";
 
         case Err::UnknownType:            return "unknown type '{}'";
         case Err::VoidVariable:           return "variables cannot have type void";
@@ -32,6 +33,12 @@ const char* templateFor(Err code) {
         case Err::UnknownField:           return "struct '{}' has no field '{}'";
         case Err::FieldAccessNonStruct:   return "cannot access field '{}' on non-struct type '{}'";
         case Err::StructLiteralMismatch:  return "struct literal for '{}' does not match its fields";
+        case Err::ConditionType:          return "condition must be an integer, got '{}'";
+        case Err::EmptyArrayLiteral:      return "array literals must have at least one element";
+        case Err::IndexNonArray:          return "cannot index into non-array type '{}'";
+        case Err::IndexNonInt:            return "array index must be an integer, got '{}'";
+        case Err::ArrayIndexOutOfBounds:  return "array index {} is out of bounds for '{}'";
+        case Err::ArrayLiteralMismatch:   return "array literal has {} element(s), expected {}";
 
         case Err::UndeclaredFunction:     return "call to undeclared function '{}'{}";
         case Err::ArgCountMismatch:       return "'{}' expects {} argument(s), got {}";

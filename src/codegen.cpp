@@ -1,4 +1,5 @@
 #include "shine/codegen.h"
+#include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Verifier.h>
 #include "shine/error.h"
 
@@ -15,6 +16,7 @@ llvm::Type* CodeGen::llvmType(const Type& t) {
         case TypeKind::Int:     return llvm::Type::getIntNTy(*ctx_, t.bitWidth);
         case TypeKind::Pointer: return llvm::PointerType::getUnqual(*ctx_);
         case TypeKind::Struct:  return structTys_.at(t.structName);
+        case TypeKind::Array:   return llvm::ArrayType::get(llvmType(*t.element), (uint64_t)t.length);
     }
     return nullptr;
 }
@@ -82,6 +84,7 @@ void CodeGen::declareFn(const FunctionDecl& fn) {
 }
 
 void CodeGen::defineFn(const FunctionDecl& fn) {
+    currentFnDecl_ = &fn;
     llvm::Function* f = fns_.at(fn.name);
     b_->SetInsertPoint(llvm::BasicBlock::Create(*ctx_, "entry", f));
 
@@ -110,7 +113,7 @@ void CodeGen::defineFn(const FunctionDecl& fn) {
 
 void CodeGen::genStmt(const Stmt& s) {
     if (auto* r = dynamic_cast<const ReturnStmt*>(&s)) {
-        if (r->value) b_->CreateRet(genExpr(*r->value));
+        if (r->value) b_->CreateRet(genExprAs(*r->value, currentFnDecl_->returnType.type));
         else b_->CreateRetVoid();
         return;
     }
@@ -120,7 +123,7 @@ void CodeGen::genStmt(const Stmt& s) {
         if (v->type.type.isVoid()) throw CompileError(v->type.loc, Err::VoidVariable);
         llvm::Type* ty = mapType(v->type);
         auto* slot = createAlloca(b_->GetInsertBlock()->getParent(), ty, v->name);
-        b_->CreateStore(castToType(genExpr(*v->value), ty, v->type.type.isSigned), slot);
+        b_->CreateStore(genExprAs(*v->value, v->type.type), slot);
         vars_[v->name] = {slot, v->isMutable, v->type.type};
         return;
     }
@@ -129,7 +132,7 @@ void CodeGen::genStmt(const Stmt& s) {
         if (it == vars_.end())
             throw CompileError(a->loc, Err::UndeclaredIdentifier, {a->name, suggestClosest(a->name, varNames())});
         if (!it->second.isMutable) throw CompileError(a->loc, Err::ImmutableAssign, {a->name});
-        llvm::Value* val = castToType(genExpr(*a->value), it->second.value->getAllocatedType(), it->second.type.isSigned);
+        llvm::Value* val = genExprAs(*a->value, it->second.type);
         b_->CreateStore(val, it->second.value);
         return;
     }
@@ -137,8 +140,7 @@ void CodeGen::genStmt(const Stmt& s) {
         AddrInfo addr = genLValueAddr(*da->target);
         if (!addr.type.isPointer()) throw CompileError(da->loc, Err::DerefNonPointer, {addr.type.canonicalName()});
         llvm::Value* ptrVal = b_->CreateLoad(llvm::PointerType::getUnqual(*ctx_), addr.ptr, "derefslot");
-        llvm::Type* pointeeTy = llvmType(*addr.type.pointee);
-        llvm::Value* val = castToType(genExpr(*da->value), pointeeTy, addr.type.pointee->isSigned);
+        llvm::Value* val = genExprAs(*da->value, *addr.type.pointee);
         b_->CreateStore(val, ptrVal);
         return;
     }
@@ -153,8 +155,17 @@ void CodeGen::genStmt(const Stmt& s) {
         if (idx < 0) throw CompileError(fa->loc, Err::UnknownField, {sd.name, fa->field});
         const Type& fieldTy = sd.fields[idx].type.type;
         llvm::Value* addr = b_->CreateStructGEP(structTys_.at(sd.name), base.ptr, idx, fa->field);
-        llvm::Value* val = castToType(genExpr(*fa->value), llvmType(fieldTy), fieldTy.isSigned);
+        llvm::Value* val = genExprAs(*fa->value, fieldTy);
         b_->CreateStore(val, addr);
+        return;
+    }
+    if (auto* ia = dynamic_cast<const IndexAssignStmt*>(&s)) {
+        AddrInfo addr = genLValueAddr(*ia->target);
+        if (!addr.type.isArray()) throw CompileError(ia->loc, Err::IndexNonArray, {addr.type.canonicalName()});
+        llvm::Value* idx = b_->CreateIntCast(genExpr(*ia->index), llvm::Type::getInt64Ty(*ctx_), true, "idx");
+        llvm::Value* elemAddr = b_->CreateGEP(llvmType(addr.type), addr.ptr, {b_->getInt32(0), idx}, "elem");
+        llvm::Value* val = genExprAs(*ia->value, *addr.type.element);
+        b_->CreateStore(val, elemAddr);
         return;
     }
     if (auto* e = dynamic_cast<const ExprStmt*>(&s)) { genExpr(*e->expr); return; }
@@ -241,8 +252,35 @@ llvm::Value* CodeGen::genExpr(const Expr& e) {
     if (auto* ao = dynamic_cast<const AddressOfExpr*>(&e)) return genAddressOf(*ao);
     if (auto* de = dynamic_cast<const DerefExpr*>(&e)) return genDeref(*de);
     if (auto* fa = dynamic_cast<const FieldAccessExpr*>(&e)) return genFieldAccess(*fa);
+    if (auto* ix = dynamic_cast<const IndexExpr*>(&e)) return genIndex(*ix);
     if (auto* sl = dynamic_cast<const StructLiteralExpr*>(&e)) return genStructLiteral(*sl);
+    if (auto* al = dynamic_cast<const ArrayLiteralExpr*>(&e)) {
+        // Bare context (e.g. `[1, 2, 3];` as a statement): element type is
+        // inferred from the first element. Every context that stores or
+        // passes an array value goes through genExprAs, which passes the
+        // known element type instead.
+        if (al->elements.empty()) throw CompileError(e.loc, Err::EmptyArrayLiteral);
+        llvm::Value* first = genExpr(*al->elements[0]);
+        llvm::Type* elemTy = first->getType();
+        llvm::Type* arrTy = llvm::ArrayType::get(elemTy, al->elements.size());
+        llvm::Function* f = b_->GetInsertBlock()->getParent();
+        auto* slot = createAlloca(f, arrTy, "arr_lit");
+        for (size_t i = 0; i < al->elements.size(); i++) {
+            llvm::Value* val = genExpr(*al->elements[i]);
+            if (val->getType()->isIntegerTy() && elemTy->isIntegerTy())
+                val = castToType(val, elemTy, true);
+            llvm::Value* addr = b_->CreateGEP(arrTy, slot, {b_->getInt32(0), b_->getInt32((int)i)}, "elemit");
+            b_->CreateStore(val, addr);
+        }
+        return b_->CreateLoad(arrTy, slot, "arr_val");
+    }
     throw CompileError(e.loc, Err::UnhandledExpression);
+}
+
+llvm::Value* CodeGen::genExprAs(const Expr& e, const Type& want) {
+    if (auto* al = dynamic_cast<const ArrayLiteralExpr*>(&e))
+        return genArrayLiteral(*al, *want.element);
+    return castToType(genExpr(e), llvmType(want), want.isSigned);
 }
 
 llvm::Value* CodeGen::genAddressOf(const AddressOfExpr& e) {
@@ -268,6 +306,16 @@ CodeGen::PtrInfo CodeGen::genPointerExpr(const Expr& e) {
         if (!inner.pointeeType.isPointer()) throw CompileError(de->loc, Err::DerefNonPointer, {inner.pointeeType.canonicalName()});
         llvm::Value* val = b_->CreateLoad(llvmType(inner.pointeeType), inner.ptr, "ptr");
         return {val, *inner.pointeeType.pointee};
+    }
+    if (auto* ix = dynamic_cast<const IndexExpr*>(&e)) {
+        // `*a[i]`: the element of an array of pointers, e.g. *ptrs[0].
+        AddrInfo base = genLValueAddr(*ix->target);
+        if (!base.type.isArray()) throw CompileError(ix->loc, Err::IndexNonArray, {base.type.canonicalName()});
+        if (!base.type.element->isPointer()) throw CompileError(ix->loc, Err::DerefNonPointer, {base.type.element->canonicalName()});
+        llvm::Value* idx = b_->CreateIntCast(genExpr(*ix->index), llvm::Type::getInt64Ty(*ctx_), true, "idx");
+        llvm::Value* elemAddr = b_->CreateGEP(llvmType(base.type), base.ptr, {b_->getInt32(0), idx}, "elem");
+        llvm::Value* ptrVal = b_->CreateLoad(llvmType(*base.type.element), elemAddr, "ptr");
+        return {ptrVal, *base.type.element->pointee};
     }
     throw CompileError(e.loc, Err::DerefNonVariable);
 }
@@ -304,7 +352,19 @@ CodeGen::AddrInfo CodeGen::genLValueAddr(const Expr& e) {
         llvm::Value* addr = b_->CreateStructGEP(sty, base.ptr, idx, fa->field);
         return {addr, sd.fields[idx].type.type};
     }
+    if (auto* ix = dynamic_cast<const IndexExpr*>(&e)) {
+        AddrInfo base = genLValueAddr(*ix->target);
+        if (!base.type.isArray()) throw CompileError(ix->loc, Err::IndexNonArray, {base.type.canonicalName()});
+        llvm::Value* idx = b_->CreateIntCast(genExpr(*ix->index), llvm::Type::getInt64Ty(*ctx_), true, "idx");
+        llvm::Value* addr = b_->CreateGEP(llvmType(base.type), base.ptr, {b_->getInt32(0), idx}, "elem");
+        return {addr, *base.type.element};
+    }
     throw CompileError(e.loc, Err::DerefNonVariable);
+}
+
+llvm::Value* CodeGen::genIndex(const IndexExpr& e) {
+    AddrInfo addr = genLValueAddr(e);
+    return b_->CreateLoad(llvmType(addr.type), addr.ptr, "elem");
 }
 
 llvm::Value* CodeGen::genFieldAccess(const FieldAccessExpr& e) {
@@ -328,10 +388,24 @@ llvm::Value* CodeGen::genStructLiteral(const StructLiteralExpr& e) {
         if (idx < 0) throw CompileError(e.loc, Err::UnknownField, {sd.name, fname});
         const Type& fieldTy = sd.fields[idx].type.type;
         llvm::Value* addr = b_->CreateStructGEP(sty, slot, idx, fname);
-        llvm::Value* val = castToType(genExpr(*fexpr), llvmType(fieldTy), fieldTy.isSigned);
+        llvm::Value* val = genExprAs(*fexpr, fieldTy);
         b_->CreateStore(val, addr);
     }
     return b_->CreateLoad(sty, slot, sd.name + "_val");
+}
+
+llvm::Value* CodeGen::genArrayLiteral(const ArrayLiteralExpr& e, const Type& elemType) {
+    if (e.elements.empty()) throw CompileError(e.loc, Err::EmptyArrayLiteral);
+    llvm::Type* elemTy = llvmType(elemType);
+    llvm::Type* arrTy = llvm::ArrayType::get(elemTy, e.elements.size());
+    llvm::Function* f = b_->GetInsertBlock()->getParent();
+    auto* slot = createAlloca(f, arrTy, "arr_lit");
+    for (size_t i = 0; i < e.elements.size(); i++) {
+        llvm::Value* val = genExprAs(*e.elements[i], elemType);
+        llvm::Value* addr = b_->CreateGEP(arrTy, slot, {b_->getInt32(0), b_->getInt32((int)i)}, "elemit");
+        b_->CreateStore(val, addr);
+    }
+    return b_->CreateLoad(arrTy, slot, "arr_val");
 }
 
 llvm::Value* CodeGen::genIdentifier(const IdentifierExpr& i) {
@@ -429,11 +503,10 @@ llvm::Value* CodeGen::genCall(const CallExpr& c) {
         throw CompileError(c.loc, Err::ArgCountMismatch,
                             {c.callee, std::to_string(f->arg_size()), std::to_string(c.args.size())});
 
+    const FunctionDecl* decl = fnDecls_.at(c.callee);
     std::vector<llvm::Value*> args;
-    for (size_t i = 0; i < c.args.size(); i++) {
-        llvm::Value* v = genExpr(*c.args[i]);
-        args.push_back(castToType(v, f->getFunctionType()->getParamType(i), true));
-    }
+    for (size_t i = 0; i < c.args.size(); i++)
+        args.push_back(genExprAs(*c.args[i], decl->params[i].type.type));
     return b_->CreateCall(f, args);
 }
 
@@ -464,7 +537,10 @@ std::unique_ptr<llvm::Module> CodeGen::generate(const Module& mod) {
         structTys_[sd.name]->setBody(fieldTys);
     }
 
-    for (auto& fn : mod.functions) declareFn(fn);
+    for (auto& fn : mod.functions) {
+        fnDecls_[fn.name] = &fn;
+        declareFn(fn);
+    }
     for (auto& fn : mod.functions) defineFn(fn);
     return std::move(mod_);
 }

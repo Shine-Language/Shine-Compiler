@@ -18,6 +18,7 @@ enum class Err {
     ExpectedType,
     ExpectedExpression,
     UnexpectedEof,
+    ArrayLengthZero,
 
     // codegen: types & variables
     UnknownType,
@@ -35,6 +36,12 @@ enum class Err {
     UnknownField,
     FieldAccessNonStruct,
     StructLiteralMismatch,
+    ConditionType,
+    EmptyArrayLiteral,
+    IndexNonArray,
+    IndexNonInt,
+    ArrayIndexOutOfBounds,
+    ArrayLiteralMismatch,
 
     // codegen: functions & calls
     UndeclaredFunction,

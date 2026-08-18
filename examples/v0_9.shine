@@ -1,0 +1,117 @@
+struct Team {
+    name: [4]i32, // fixed-size array as a struct field
+    score: i32,
+}
+
+fn i32 sum_all(a: [5]i32) {
+    // Arrays are values: passed by value (the whole array is copied).
+    var(i32) total = 0;
+    var(i32) i = 0;
+    loop (i < 5) {
+        total = total + a[i];
+        i = i + 1;
+    }
+    r/total;
+}
+
+fn [2][3]i32 flip(g: [2][3]i32) {
+    // Nested (multidimensional) arrays, returned by value.
+    var([2][3]i32) out = [[0, 0, 0], [0, 0, 0]];
+    out[0][0] = g[1][2];
+    out[0][1] = g[1][1];
+    out[0][2] = g[1][0];
+    out[1][0] = g[0][2];
+    out[1][1] = g[0][1];
+    out[1][2] = g[0][0];
+    r/out;
+}
+
+fn i32 main() {
+    // Fixed-size array declaration with an array literal.
+    var([5]i32) arr = [10, 20, 30, 40, 50];
+
+    // Indexing reads.
+    write(arr[0]); // 10
+    write(arr[4]); // 50
+
+    // Indexing writes.
+    arr[2] = 99;
+    write(arr[2]); // 99
+
+    // Indexing with a computed index.
+    var(i32) i = 0;
+    var(i32) sum = 0;
+    loop (i < 5) {
+        sum = sum + arr[i];
+        i = i + 1;
+    }
+    write(sum); // 219
+
+    // Bounds checking is decided and documented:
+    //   - Constant indices are checked at compile time, so this line is an
+    //     error:  write(arr[5]);  // error: array index 5 is out of bounds for '[5]i32'
+    //   - Non-constant indices are not bounds-checked at runtime yet (like
+    //     C). Whether runtime checks get added is still TBD.
+
+    // Whole-array value copy on assignment.
+    var([5]i32) copy = arr;
+    write(sum_all(copy)); // 219
+
+    // Nested (multidimensional) arrays.
+    var([2][3]i32) grid = [[1, 2, 3], [4, 5, 6]];
+    write(grid[1][2]); // 6
+    var([2][3]i32) flipped = flip(grid);
+    write(flipped[0][0]); // 6
+
+    // Arrays of pointers, indexed and dereferenced.
+    var(i32) x = 7;
+    var([3]*i32) ptrs = [&x, 0, &x];
+    write(*ptrs[0]); // 7
+
+    // Int literals widen to a larger element type.
+    var([3]i64) big = [1, 2, 3];
+    write(big[2]); // 3
+
+    // Structs embed fixed-size arrays; indexing works through field access.
+    var(Team) team = Team { name: [3, 1, 4, 1], score: 5 };
+    write(team.name[2]); // 4
+    team.name[3] = 9;
+    write(team.name[3]); // 9
+
+    // The literal's element count must match the declared length:
+    // var([5]i32) wrong = [1, 2]; // error: array literal has 2 element(s), expected 5
+
+    r/0;
+}
+
+// ---------------------------------------------------------------------------
+// Planned for v0.9.0, not yet supported by the compiler (spec to build toward)
+// ---------------------------------------------------------------------------
+
+// Array/pointer decay: passing an array where a *T is expected should decay
+// to a pointer to its first element, like C, so functions can take arrays of
+// any length:
+//
+//   fn i32 sum_first3(n: *i32) {
+//       r/n[0] + n[1] + n[2];
+//   }
+//
+//   var([5]i32) arr = [10, 20, 30, 40, 50];
+//   write(sum_first3(arr)); // 'arr' decays to *i32
+
+// Simple slices: a (pointer + length) view over an array, so functions can
+// accept a variable-size chunk of an array without copying. Exact syntax is
+// TBD; this is the shape it will probably take:
+//
+//   fn i32 sum_all(s: slice(i32)) {
+//       var(i32) total = 0;
+//       var(i32) i = 0;
+//       loop (i < s.len) {
+//           total = total + s[i];
+//           i = i + 1;
+//       }
+//       r/total;
+//   }
+//
+//   var([5]i32) arr = [10, 20, 30, 40, 50];
+//   write(sum_all(arr[1..3])); // 20 + 30

@@ -77,3 +77,17 @@ TEST(r_before_comment_is_identifier_not_return) {
     ASSERT_TRUE(toks[0].kind == TokenKind::Identifier);
     ASSERT_EQ(toks[0].text, "r");
 }
+
+TEST(bracket_tokens) {
+    Lexer l("[5]i32 arr[0]", "t.shine");
+    auto toks = l.tokenize();
+    ASSERT_TRUE(toks[0].kind == TokenKind::LBracket);
+    ASSERT_TRUE(toks[1].kind == TokenKind::IntLiteral);
+    ASSERT_TRUE(toks[2].kind == TokenKind::RBracket);
+    ASSERT_TRUE(toks[3].kind == TokenKind::Identifier);
+    ASSERT_TRUE(toks[4].kind == TokenKind::Identifier);
+    ASSERT_EQ(toks[4].text, "arr");
+    ASSERT_TRUE(toks[5].kind == TokenKind::LBracket);
+    ASSERT_TRUE(toks[6].kind == TokenKind::IntLiteral);
+    ASSERT_TRUE(toks[7].kind == TokenKind::RBracket);
+}

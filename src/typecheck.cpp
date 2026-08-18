@@ -33,6 +33,17 @@ const StructField& TypeChecker::findField(const StructDecl& sd, const std::strin
 }
 
 void TypeChecker::checkAssignable(const Expr& src, const Type& want, const SourceLoc& loc) {
+    // Array literals are checked element-wise against the target array's
+    // element type (so `[1, 2, 3]` is accepted for a [3]i64, not just [3]i32).
+    if (auto* al = dynamic_cast<const ArrayLiteralExpr*>(&src)) {
+        if (!want.isArray())
+            throw CompileError(loc, Err::TypeMismatch, {want.canonicalName(), "array literal"});
+        if ((int64_t)al->elements.size() != want.length)
+            throw CompileError(loc, Err::ArrayLiteralMismatch,
+                {std::to_string(al->elements.size()), std::to_string(want.length)});
+        for (auto& el : al->elements) checkAssignable(*el, *want.element, el->loc);
+        return;
+    }
     Type got = inferExpr(src);
     if (got.equals(want)) return;
     if (want.isInt() && got.isInt() && dynamic_cast<const IntLiteralExpr*>(&src)) return;
@@ -120,6 +131,18 @@ Type TypeChecker::inferExpr(const Expr& e) {
         if (!t.isStruct()) throw CompileError(fa->loc, Err::FieldAccessNonStruct, {fa->field, t.canonicalName()});
         return findField(findStruct(t.structName, fa->loc), fa->field, fa->loc).type.type;
     }
+    if (auto* ix = dynamic_cast<const IndexExpr*>(&e)) {
+        Type t = inferExpr(*ix->target);
+        if (!t.isArray()) throw CompileError(ix->loc, Err::IndexNonArray, {t.canonicalName()});
+        Type it = inferExpr(*ix->index);
+        if (!it.isInt()) throw CompileError(ix->index->loc, Err::IndexNonInt, {it.canonicalName()});
+        // Constant indices are bounds-checked at compile time.
+        if (auto* lit = dynamic_cast<const IntLiteralExpr*>(ix->index.get()))
+            if (lit->value < 0 || lit->value >= t.length)
+                throw CompileError(ix->index->loc, Err::ArrayIndexOutOfBounds,
+                    {std::to_string(lit->value), t.canonicalName()});
+        return *t.element;
+    }
     if (auto* sl = dynamic_cast<const StructLiteralExpr*>(&e)) {
         const StructDecl& sd = findStruct(sl->structName, sl->loc);
         if (sl->fields.size() != sd.fields.size())
@@ -129,6 +152,11 @@ Type TypeChecker::inferExpr(const Expr& e) {
             checkAssignable(*fexpr, field.type.type, fexpr->loc);
         }
         return Type::makeStruct(sd.name);
+    }
+    if (auto* al = dynamic_cast<const ArrayLiteralExpr*>(&e)) {
+        if (al->elements.empty()) throw CompileError(e.loc, Err::EmptyArrayLiteral);
+        Type elem = inferExpr(*al->elements[0]);
+        return Type::makeArray(elem, (int64_t)al->elements.size());
     }
     throw CompileError(e.loc, Err::UnhandledExpression);
 }
@@ -171,6 +199,18 @@ void TypeChecker::checkStmt(const Stmt& s) {
         checkAssignable(*fa->value, field.type.type, fa->value->loc);
         return;
     }
+    if (auto* ia = dynamic_cast<const IndexAssignStmt*>(&s)) {
+        Type t = inferExpr(*ia->target);
+        if (!t.isArray()) throw CompileError(ia->loc, Err::IndexNonArray, {t.canonicalName()});
+        Type it = inferExpr(*ia->index);
+        if (!it.isInt()) throw CompileError(ia->index->loc, Err::IndexNonInt, {it.canonicalName()});
+        if (auto* lit = dynamic_cast<const IntLiteralExpr*>(ia->index.get()))
+            if (lit->value < 0 || lit->value >= t.length)
+                throw CompileError(ia->index->loc, Err::ArrayIndexOutOfBounds,
+                    {std::to_string(lit->value), t.canonicalName()});
+        checkAssignable(*ia->value, *t.element, ia->value->loc);
+        return;
+    }
     if (auto* e = dynamic_cast<const ExprStmt*>(&s)) { inferExpr(*e->expr); return; }
     if (auto* i = dynamic_cast<const IfStmt*>(&s)) { checkIf(*i); return; }
     if (auto* l = dynamic_cast<const LoopStmt*>(&s)) { checkLoop(*l); return; }
@@ -190,13 +230,15 @@ void TypeChecker::checkStmtList(const std::vector<StmtPtr>& stmts) {
 }
 
 void TypeChecker::checkIf(const IfStmt& s) {
-    inferExpr(*s.cond);
+    Type t = inferExpr(*s.cond);
+    if (!t.isInt()) throw CompileError(s.cond->loc, Err::ConditionType, {t.canonicalName()});
     checkStmtList(s.thenBody);
     checkStmtList(s.elseBody);
 }
 
 void TypeChecker::checkLoop(const LoopStmt& s) {
-    inferExpr(*s.cond);
+    Type t = inferExpr(*s.cond);
+    if (!t.isInt()) throw CompileError(s.cond->loc, Err::ConditionType, {t.canonicalName()});
     loopDepth_++;
     checkStmtList(s.body);
     loopDepth_--;

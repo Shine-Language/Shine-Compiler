@@ -40,6 +40,7 @@ private:
     ExprPtr postfix();
     ExprPtr primary();
     ExprPtr structLiteral(const Token& name);
+    ExprPtr arrayLiteral();
 
     [[noreturn]] void err(const Token& t, const std::string& msg) const;
     [[noreturn]] void err(const Token& t, Err code, const std::vector<std::string>& args = {}) const;

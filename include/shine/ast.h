@@ -24,10 +24,12 @@ struct BinaryExpr : Expr { std::string op; ExprPtr left; ExprPtr right; };
 struct AddressOfExpr : Expr { ExprPtr operand; };
 struct DerefExpr : Expr { ExprPtr operand; };
 struct FieldAccessExpr : Expr { ExprPtr target; std::string field; };
+struct IndexExpr : Expr { ExprPtr target; ExprPtr index; };
 struct StructLiteralExpr : Expr {
     std::string structName;
     std::vector<std::pair<std::string, ExprPtr>> fields;
 };
+struct ArrayLiteralExpr : Expr { std::vector<ExprPtr> elements; };
 
 struct Stmt { virtual ~Stmt() = default; SourceLoc loc; };
 using StmtPtr = std::unique_ptr<Stmt>;
@@ -44,6 +46,8 @@ struct AssignStmt : Stmt { std::string name; ExprPtr value; };
 struct DerefAssignStmt : Stmt { ExprPtr target; ExprPtr value; };
 // `target.field = value;` -- target is the struct-valued expression being written through.
 struct FieldAssignStmt : Stmt { ExprPtr target; std::string field; ExprPtr value; };
+// `target[index] = value;` -- target is the array-valued expression being written through.
+struct IndexAssignStmt : Stmt { ExprPtr target; ExprPtr index; ExprPtr value; };
 struct IfStmt : Stmt {
     ExprPtr cond;
     std::vector<StmtPtr> thenBody;
